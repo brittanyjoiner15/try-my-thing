@@ -14,6 +14,8 @@ export default function ChatThread({ chatId, chatType, meId, themName, initialMe
   const [status, setStatus] = useState(initialStatus);
   const [text, setText] = useState(draft);
   const [error, setError] = useState(null);
+  const [offline, setOffline] = useState(false); // polling is failing (Netlify, Supabase or the network)
+  const failing = useRef(false); // same thing, readable inside the interval without re-creating it
   const [sending, startSending] = useTransition();
   const bottom = useRef(null);
   const first = themName.split(" ")[0];
@@ -34,7 +36,18 @@ export default function ChatThread({ chatId, chatType, meId, themName, initialMe
     if (status === "declined") return;
     const tick = async () => {
       if (document.hidden) return;
-      const result = await pollChat(chatId, latest);
+      let result;
+      try {
+        result = await pollChat(chatId, latest);
+      } catch (err) {
+        // Report the first failure in a streak only. Otherwise an outage sends one error every 5s per open chat.
+        if (!failing.current) posthog.captureException(err, { feature: "chat", action: "pollChat", chat_id: chatId });
+        failing.current = true;
+        setOffline(true);
+        return;
+      }
+      failing.current = false;
+      setOffline(false);
       if (result?.error) return;
       setStatus(result.status);
       if (result.messages.length) setMessages((m) => merge(m, result.messages));
@@ -53,7 +66,13 @@ export default function ChatThread({ chatId, chatType, meId, themName, initialMe
     if (!body || sending) return;
     setError(null);
     startSending(async () => {
-      const result = await sendMessage(chatId, body);
+      let result;
+      try {
+        result = await sendMessage(chatId, body);
+      } catch (err) {
+        posthog.captureException(err, { feature: "chat", action: "sendMessage", chat_id: chatId });
+        return setError("Couldn't send. Check your connection and try again.");
+      }
       if (result?.error) return setError(result.error);
       // stats come from the server (first message? reply? who sent it?). was_draft = sent the pre-written intro unedited.
       posthog.capture("message_sent", { ...result.stats, was_draft: Boolean(draft) && body === draft.trim() });
@@ -68,6 +87,7 @@ export default function ChatThread({ chatId, chatType, meId, themName, initialMe
 
   return (
     <div className="space-y-4">
+      {offline && <p className="rounded-lg bg-yellow-100 px-3 py-2 text-sm text-yellow-900">Can&apos;t reach the server. Retrying…</p>}
       {/* ph-no-capture: message text stays out of session replays and autocapture. */}
       <ol className="ph-no-capture space-y-2">
         {messages.map((m) => {

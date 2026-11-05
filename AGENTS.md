@@ -31,6 +31,7 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 - Browser setup: `instrumentation-client.js`. It throws in dev if either PostHog env var is missing. Britt chose this, so demo mode also needs the keys.
 - Browser events are captured in `SwipeDeck.js`, `ProfileForm.js`, `ProductForm.js` and `login/page.js` (snake_case names). `BottomNav.js` calls `identify` (user ID + email) and `reset()` on sign-out.
 - Server logs go to PostHog **Logs** (not analytics events) through OpenTelemetry: `instrumentation.js` and `lib/posthog-logs.js`, called from `app/actions.js`.
+- Server errors go to PostHog **Error tracking** through `posthog-node`: `onRequestError` in `instrumentation.js`, plus `captureServerError` from `lib/posthog-server.js` for work in `after()` (emails). A Resend 429 is tagged `limit: "resend"`.
 - Any new element that shows an email or chat message text needs the `ph-no-capture` class, so it stays out of session replays.
 
 ### Database migrations
@@ -52,5 +53,5 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 - Connect GitHub (Supabase identity linking) to pre-fill stack, bio and location. LinkedIn's API only returns name/email/photo, so it stays a plain URL field.
 - Builder matches aren't shown on `/admin` yet.
 - PostHog event for card page taps, to see whether testers flip through prompts.
-- PostHog follow-ups (details in `docs/posthog-wizard-review.md`): log failures in `app/actions.js` and move the log flush into `after()`; add a server-side `user_signed_in` event with `is_new_user` in `app/auth/callback/route.js`; capture server errors with `onRequestError`; add IDs to the match events; add a reverse proxy for ad blockers.
+- PostHog follow-ups (details in `docs/posthog-wizard-review.md`): log failures in `app/actions.js` and move the log flush into `after()`; add a server-side `user_signed_in` event with `is_new_user` in `app/auth/callback/route.js`; add IDs to the match events; add a reverse proxy for ad blockers.
 - Terms or a privacy note saying Britt can see account emails (they're on PostHog person profiles).

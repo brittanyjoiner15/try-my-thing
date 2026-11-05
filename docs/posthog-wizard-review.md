@@ -98,6 +98,8 @@ There's no event for "signed in" or "created an account" today. Add `user_signed
 **7. Capture server errors too.**
 `capture_exceptions` and `global-error.js` only catch browser-side crashes. Errors in server actions and server components (Supabase failures, upload errors) aren't tracked. Add `onRequestError` in `instrumentation.js` and send the error with `posthog-node`'s `captureException`.
 
+**Done (2026-11-05, chat PR):** `instrumentation.js` exports `onRequestError`, which sends server errors to Error tracking through `lib/posthog-server.js`. Failed Resend emails (they run in `after()`, so `onRequestError` doesn't see them) are reported from `lib/match-emails.js` with `limit: "resend"` on a 429. The chat page reports the first failed poll in a streak (`feature: "chat"`), not one per 5s. Supabase errors keep their `code`. Our own message rate limit goes to Logs as `message_rate_limited`.
+
 **8. Add properties to the match events.**
 `product_match_created` and `builder_match_created` have no properties. Add `product_id` or `builder_id` so you can see which products get matches.
 

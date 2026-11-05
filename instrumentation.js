@@ -42,3 +42,18 @@ export function register() {
     logs.setGlobalLoggerProvider(loggerProvider);
   }
 }
+
+// Any error Next.js catches on the server (server components, server actions, route handlers)
+// goes to PostHog Error tracking. Imported lazily so the edge runtime never loads posthog-node.
+export async function onRequestError(error, request, context) {
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  const { captureServerError } = await import("@/lib/posthog-server");
+  await captureServerError(error, {
+    path: request.path,
+    method: request.method,
+    route: context.routePath,
+    route_type: context.routeType, // "render" | "action" | "route" | "proxy"
+    digest: error?.digest,
+    code: error?.code, // Supabase error code, when it came from lib/data/supabase.js
+  });
+}

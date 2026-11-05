@@ -318,6 +318,9 @@ export async function sendMessage(chatId, text) {
 
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   if ((await data.countRecentMessages(user.id, tenMinAgo)) >= MAX_MESSAGES_PER_10_MIN) {
+    // Our own limit, not an outage. Logged so we can see if it's set too low for real conversations.
+    logPostHogAction("message rate limited", { event: "message_rate_limited", chat_id: chatId, limit: MAX_MESSAGES_PER_10_MIN });
+    await flushPostHogLogs();
     return { error: "You're sending a lot of messages. Take a breather and try again in a few minutes." };
   }
 

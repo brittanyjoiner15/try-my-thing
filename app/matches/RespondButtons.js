@@ -11,7 +11,13 @@ export default function RespondButtons({ chatId }) {
 
   const respond = (accept) =>
     startTransition(async () => {
-      const result = await respondToTester(chatId, accept);
+      let result;
+      try {
+        result = await respondToTester(chatId, accept);
+      } catch (err) {
+        posthog.captureException(err, { feature: "chat", action: "respondToTester", chat_id: chatId });
+        return setError("Couldn't save that. Try again.");
+      }
       if (result?.error) return setError(result.error);
       posthog.capture("tester_request_answered", { chat_id: chatId, accepted: accept, ...result.stats });
     });
