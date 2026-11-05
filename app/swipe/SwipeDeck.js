@@ -4,8 +4,10 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import posthog from "posthog-js";
 import { swipe } from "@/app/actions";
+import { Logo } from "@/app/components/ProductProfile";
 
 const THRESHOLD = 110; // px of drag before a release counts as a swipe
+const TAP = 6; // px of movement still treated as a tap (flips the card's page)
 
 export default function SwipeDeck({ initialCards }) {
   const [cards, setCards] = useState(initialCards);
@@ -16,8 +18,10 @@ export default function SwipeDeck({ initialCards }) {
   const [, startTransition] = useTransition();
   const dragStart = useRef(null);
   const [dragging, setDragging] = useState(false);
+  const [page, setPage] = useState(0); // which page of the current card is showing
 
   const card = cards[0];
+  const pages = card ? cardPages(card) : [];
 
   function decide(direction) {
     if (!card || flying) return;
@@ -34,6 +38,7 @@ export default function SwipeDeck({ initialCards }) {
     // Let the fly-out animation play, then drop the card.
     setTimeout(() => {
       setCards((c) => c.slice(1));
+      setPage(0);
       setFlying(null);
       setDx(0);
     }, 250);
@@ -71,49 +76,82 @@ export default function SwipeDeck({ initialCards }) {
       {message && <Message {...message} />}
 
       <div
-        className="panel relative cursor-grab touch-none select-none shadow-lg active:cursor-grabbing"
+        className="relative flex cursor-grab select-none flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-lg active:cursor-grabbing"
         style={{
           transform: `translateX(${offset}px) rotate(${offset / 20}deg)`,
           transition: dragging ? "none" : "transform 250ms ease",
+          // Vertical swipes scroll the page; horizontal ones drag the card.
+          touchAction: "pan-y",
+          height: "clamp(420px, 62vh, 600px)",
         }}
         onPointerDown={(e) => {
+          if (e.target.closest("a")) return; // let links be clicked
           dragStart.current = e.clientX;
           setDragging(true);
           e.currentTarget.setPointerCapture(e.pointerId);
         }}
         onPointerMove={(e) => dragStart.current !== null && setDx(e.clientX - dragStart.current)}
-        onPointerUp={() => {
+        onPointerUp={(e) => {
+          if (dragStart.current === null) return;
           dragStart.current = null;
           setDragging(false);
-          if (dx > THRESHOLD) decide("right");
+          if (Math.abs(dx) < TAP) {
+            // Tap like Tinder photos: right half = next page, left half = previous.
+            const rect = e.currentTarget.getBoundingClientRect();
+            const forward = e.clientX > rect.left + rect.width / 2;
+            setPage((p) => Math.max(0, Math.min(pages.length - 1, p + (forward ? 1 : -1))));
+            setDx(0);
+          } else if (dx > THRESHOLD) decide("right");
           else if (dx < -THRESHOLD) decide("left");
           else setDx(0);
         }}
+        // Fires when the browser takes over the gesture to scroll. Snap the card back.
+        onPointerCancel={() => {
+          dragStart.current = null;
+          setDragging(false);
+          setDx(0);
+        }}
       >
-        <Stamp show={offset > 40} className="left-4 border-green-600 text-green-600">TRY IT</Stamp>
-        <Stamp show={offset < -40} className="right-4 border-muted text-muted">SKIP</Stamp>
+        <Stamp show={offset > 40} className="left-4 border-green-600 bg-card text-green-600">TRY IT</Stamp>
+        <Stamp show={offset < -40} className="right-4 border-muted bg-card text-muted">SKIP</Stamp>
 
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-          {card.stage} · by {card.builder}
-        </p>
-        <h1 className="mt-2 text-3xl font-bold">{card.name}</h1>
-        <p className="mt-2 text-lg">{card.tagline}</p>
+        {pages.length > 1 && (
+          <div className="absolute inset-x-3 top-2 z-10 flex gap-1">
+            {pages.map((_, i) => (
+              <span key={i} className={`h-1 flex-1 rounded-full ${i === page ? "bg-foreground" : "bg-foreground/20"}`} />
+            ))}
+          </div>
+        )}
 
-        <dl className="mt-6 space-y-3 text-sm">
-          <Row label="Looking for">{card.wants}</Row>
-          <Row label="Feedback on">{card.feedback_on}</Row>
-          <Row label="You get">{card.perk}</Row>
-        </dl>
+        <div className="min-h-0 flex-1">
+          <CardPage card={card} page={pages[page]} />
+        </div>
 
-        <a
-          href={card.url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-6 inline-block text-sm font-semibold text-accent underline"
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          Peek at the site ↗
-        </a>
+        <footer className="space-y-2 border-t border-border p-4">
+          <div className="flex items-center gap-3">
+            <Logo product={card} size="h-10 w-10 text-lg" />
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-xl font-bold">{card.name}</h1>
+              <p className="text-xs text-muted">
+                by {card.builder} · {card.stage}
+              </p>
+            </div>
+            <a href={`/products/${card.id}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-accent underline">
+              Full profile ↗
+            </a>
+          </div>
+          <p className="text-sm">{card.tagline}</p>
+          <ul className="flex flex-wrap gap-1 text-xs">
+            {[...(card.platforms ?? []), `🎁 ${card.perk}`].map((chip) => (
+              <li key={chip} className="rounded-full border border-border px-2 py-0.5">
+                {chip}
+              </li>
+            ))}
+          </ul>
+          <p className="line-clamp-2 text-sm text-muted">
+            <span className="font-semibold">For:</span> {card.wants}
+          </p>
+        </footer>
       </div>
 
       <div className="mt-6 flex justify-center gap-4">
@@ -125,17 +163,46 @@ export default function SwipeDeck({ initialCards }) {
         </button>
       </div>
       <p className="mt-3 text-center text-xs text-muted">
-        Drag the card, or use ← → keys. Try it = you get {card.builder}&apos;s email to set it up.
+        Tap the card to flip through it. Drag it, or use ← → keys, to decide. Try it = you get {card.builder}&apos;s email to set it up.
       </p>
     </div>
   );
 }
 
-function Row({ label, children }) {
+// Pages a tester taps through: screenshot (or big logo), then each prompt, then what feedback they want.
+function cardPages(card) {
+  return [
+    card.screenshot_url ? { type: "screenshot" } : { type: "logo" },
+    ...(card.prompts ?? []).map((p) => ({ type: "prompt", ...p })),
+    { type: "prompt", prompt: "I want honest feedback on…", answer: card.feedback_on },
+  ];
+}
+
+function CardPage({ card, page }) {
+  if (page.type === "screenshot") {
+    return (
+      <div className="flex h-full items-center justify-center bg-background px-4 pb-3 pt-6">
+        {/* eslint-disable-next-line @next/next/no-img-element -- Supabase Storage URL */}
+        <img
+          src={card.screenshot_url}
+          alt={`${card.name} screenshot`}
+          draggable={false}
+          className="aspect-[9/19.5] h-full rounded-[1.5rem] border-[5px] border-foreground object-cover object-top"
+        />
+      </div>
+    );
+  }
+  if (page.type === "logo") {
+    return (
+      <div className="flex h-full items-center justify-center bg-accent/10">
+        <Logo product={card} size="h-28 w-28 text-5xl" />
+      </div>
+    );
+  }
   return (
-    <div>
-      <dt className="font-semibold text-muted">{label}</dt>
-      <dd>{children}</dd>
+    <div className="flex h-full flex-col justify-center bg-background p-6">
+      <p className="text-sm font-semibold text-muted">{page.prompt}</p>
+      <p className="mt-3 text-2xl font-bold leading-snug">{page.answer}</p>
     </div>
   );
 }
@@ -143,7 +210,7 @@ function Row({ label, children }) {
 function Stamp({ show, className, children }) {
   return (
     <span
-      className={`absolute top-4 rounded-md border-2 px-2 py-1 text-sm font-black transition-opacity ${className}`}
+      className={`absolute top-6 z-20 rounded-md border-2 px-2 py-1 text-sm font-black transition-opacity ${className}`}
       style={{ opacity: show ? 1 : 0 }}
     >
       {children}

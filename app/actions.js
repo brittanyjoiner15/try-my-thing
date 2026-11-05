@@ -7,6 +7,8 @@ import { createAuthClient } from "@/lib/supabase/server";
 import { DEMO } from "@/lib/demo";
 import { getUser, requireProfile, requireAdmin } from "@/lib/session";
 import * as data from "@/lib/data";
+import { introMailto } from "@/lib/intro";
+import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TYPES } from "@/lib/product-options";
 
 // Keeps testers from right-swiping everything and flooding builders with no-shows.
 const MAX_RIGHT_SWIPES_PER_WEEK = 3;
@@ -54,10 +56,15 @@ export async function saveProfile(formData) {
   redirect("/swipe");
 }
 
-export async function createProduct(formData) {
-  const { user } = await requireProfile();
-  await data.createProduct({
-    owner_id: user.id,
+// Text fields shared by "post" and "edit". Only known platforms and prompts get through.
+function productFields(formData) {
+  const prompts = [];
+  for (let i = 0; i < PROMPT_SLOTS; i++) {
+    const prompt = field(formData, `prompt_${i}`);
+    const answer = field(formData, `answer_${i}`).slice(0, ANSWER_MAX);
+    if (PROMPTS.includes(prompt) && answer && !prompts.some((p) => p.prompt === prompt)) prompts.push({ prompt, answer });
+  }
+  return {
     name: field(formData, "name"),
     url: field(formData, "url"),
     tagline: field(formData, "tagline"),
@@ -66,9 +73,52 @@ export async function createProduct(formData) {
     stage: field(formData, "stage"),
     perk: field(formData, "perk"),
     max_testers: Number(formData.get("max_testers")) || 3,
+    platforms: formData.getAll("platforms").filter((p) => PLATFORMS.includes(p)),
+    prompts,
+  };
+}
+
+// Uploads the logo/screenshot files that were picked. An empty file input means "keep the current one".
+async function productImages(formData, productId) {
+  const urls = {};
+  for (const kind of ["logo", "screenshot"]) {
+    const file = formData.get(kind);
+    if (!(file instanceof File) || file.size === 0) continue;
+    if (!IMAGE_TYPES.includes(file.type)) throw new Error("Images must be PNG, JPG, WebP or GIF.");
+    if (file.size > IMAGE_MAX_BYTES) throw new Error("Images must be under 2MB.");
+    // Timestamp in the path so browsers don't show a cached old image after a replace.
+    // TODO: delete the replaced file from storage. It's harmless clutter for now.
+    const ext = file.type.split("/")[1];
+    urls[`${kind}_url`] = await data.uploadImage(`${productId}/${kind}-${Date.now()}.${ext}`, file);
+  }
+  return urls;
+}
+
+export async function createProduct(formData) {
+  const { user } = await requireProfile();
+  const id = crypto.randomUUID(); // made here so images can be stored under the product's id
+  await data.createProduct({
+    id,
+    owner_id: user.id,
+    ...productFields(formData),
+    ...(await productImages(formData, id)),
   });
   revalidatePath("/products");
-  redirect("/products");
+  redirect(`/products/${id}`);
+}
+
+export async function updateProduct(productId, formData) {
+  const { user } = await requireProfile();
+  const product = await data.getProductWithOwner(productId);
+  if (product?.owner_id !== user.id) throw new Error("You can only edit your own products.");
+
+  await data.updateProduct(productId, user.id, {
+    ...productFields(formData),
+    ...(await productImages(formData, productId)),
+  });
+  revalidatePath("/products");
+  revalidatePath(`/products/${productId}`);
+  redirect(`/products/${productId}`);
 }
 
 // Owner pauses/unpauses their own product.
@@ -105,23 +155,9 @@ export async function swipe(productId, direction) {
       product: product.name,
       builderName: product.owner.name,
       builderEmail: product.owner.email,
-      mailto: introMailto(product, profile),
+      mailto: introMailto({ product, builder: product.owner, tester: profile }),
     },
   };
-}
-
-// Pre-written first email from the tester to the builder.
-function introMailto(product, tester) {
-  const builderFirst = product.owner.name.split(" ")[0];
-  const subject = `Trying ${product.name} (via the PostHog community)`;
-  const body = `Hi ${builderFirst},
-
-I swiped right on ${product.name} on try my thing, the PostHog community matchmaker. I'm a ${tester.role} using ${tester.stack}, and I'd like to try it and send you honest feedback, especially on ${product.feedback_on}.
-
-How do I get access?
-
-${tester.name}`;
-  return `mailto:${product.owner.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 export async function setProductHidden(productId, hidden) {
