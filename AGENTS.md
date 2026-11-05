@@ -35,10 +35,16 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 - Server errors go to PostHog **Error tracking** through `posthog-node`: `onRequestError` in `instrumentation.js`, plus `captureServerError` from `lib/posthog-server.js` for work in `after()` (emails). A Resend 429 is tagged `limit: "resend"`.
 - Any new element that shows an email or chat message text needs the `ph-no-capture` class, so it stays out of session replays.
 
+### GitHub
+- "Continue with GitHub" (`/login`) and "Connect GitHub" (`/profile`, `/onboarding`, through Supabase `linkIdentity`) both land in `app/auth/callback/route.js`. It reads GitHub's one-time `provider_token` and saves public data to `github_profiles` (`lib/github.js`). It refreshes on every GitHub sign-in, and "Refresh from GitHub" on `/profile` re-reads public data by username without a token (60 requests an hour per IP).
+- `github_profiles` stays separate from `profiles`: it holds what GitHub says, and the profile holds what the person wrote. The form fills empty fields from it and shows a suggestion under fields that differ. `featured_repos` on profiles holds the up to 3 repos they picked for their card (null = never picked, so the form pre-checks their top 3).
+- Supabase setup: GitHub provider on (OAuth App callback `https://kwuossjlcjpzmhmlzhuu.supabase.co/auth/v1/callback`), and **Manual linking** on, or Connect GitHub fails.
+- People who only sign in with GitHub can't disconnect it (Supabase won't remove someone's last sign-in method).
+
 ### Database migrations
 - Migrations are applied **by hand** and aren't in Supabase's migration history. Never run `supabase db push`, because it would re-run the init migration.
 - Apply with `supabase db query --linked --project-ref kwuossjlcjpzmhmlzhuu -f <file>`. Run this from a scratch folder that holds a copy of `supabase/migrations/`: inside the repo, the CLI fails with "failed to parse environment file: .env.local".
-- Applied so far: `20261103000000_init`, `20261104000000_product_profiles`, `20261104010000_featured_products`, `20261105000000_builder_matching`, `20261105010000_profile_photos`, `20261106000000_chat`.
+- Applied so far: `20261103000000_init`, `20261104000000_product_profiles`, `20261104010000_featured_products`, `20261105000000_builder_matching`, `20261105010000_profile_photos`, `20261106000000_chat`, `20261107000000_github_profiles`, `20261107010000_featured_repos`.
 
 ### Testing
 - Don't run `pnpm install` while the dev server is running. Turbopack keeps the old module paths, and the page gets stuck in a full-reload loop. If that happens, Britt restarts the server with `rm -rf .next && pnpm dev`.
@@ -51,7 +57,7 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 - Branded Supabase email templates (they still use the plain defaults).
 - Chat: block/report, live unread badge (it only updates on page loads), and a "Remove" for declined requests. Declined testers still count toward a product's `max_testers`.
 - "Remove image" button, and deleting replaced images from storage (TODO in `app/actions.js`).
-- Connect GitHub (Supabase identity linking) to pre-fill stack, bio and location. LinkedIn's API only returns name/email/photo, so it stays a plain URL field.
+- GitHub: ranking the Builders deck on shared GitHub languages (skipped until there are enough builders). LinkedIn's API only returns name/email/photo, so it stays a plain URL field.
 - Builder matches aren't shown on `/admin` yet.
 - PostHog event for card page taps, to see whether testers flip through prompts.
 - PostHog follow-ups (details in `docs/posthog-wizard-review.md`): log failures in `app/actions.js` and move the log flush into `after()`; add a server-side `user_signed_in` event with `is_new_user` in `app/auth/callback/route.js`; add IDs to the match events; add a reverse proxy for ad blockers.
