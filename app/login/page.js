@@ -47,6 +47,13 @@ export default function LoginPage() {
       <Suspense>
         <LoginForm />
       </Suspense>
+      <p className="mt-6 text-center text-sm text-muted">
+        Just curious?{" "}
+        <a href="/demo" className="font-semibold text-accent underline">
+          Try the demo
+        </a>{" "}
+        with fake data, no account.
+      </p>
     </div>
   );
 }

@@ -21,7 +21,8 @@ Tinder for trying software, from the PostHog community. Read `README.md` first f
 - **PostHog:** US cloud. Env vars are `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST`, set in `.env.local` and Netlify (renamed from `NEXT_PUBLIC_POSTHOG_KEY` on 2026-11-04). Session replay is off for this app's project.
 
 ### Working on the code
-- All data access goes through `lib/data/index.js`. Every new function needs a version in both `mock.js` (demo mode) and `supabase.js`.
+- All data access goes through `lib/data/index.js`. Every new function needs a version in both `mock.js` (demo mode) and `supabase.js`, plus a `route("name")` line in `index.js`.
+- Demo is decided per request: `isDemo()` in `lib/demo.js` is true with no Supabase keys, or when the `/demo` cookie is set on the real site. Don't use `DEMO_ENV` for that check; it only covers the no-keys case. Anything with real-world side effects (emails, Supabase auth) must skip demo visitors.
 - Prompt and platform lists: `lib/product-options.js`. Profile lists (roles, problem spaces, looking for): `lib/profile-options.js`. Pre-written first chat message: `lib/intro.js`.
 - `featured` products sort first in every deck. Set it by hand in SQL; there's no UI. The PostHog example product is featured and owned by Britt's personal account.
 - Images: public `product-images` storage bucket, uploaded only by server code with the secret key. No SVG. Profile photos live in the same bucket under `avatars/<user id>/`.
