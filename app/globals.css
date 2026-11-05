@@ -56,3 +56,20 @@ body {
 @utility panel {
   @apply rounded-2xl border border-border bg-card p-6;
 }
+
+/* Landing page: the top example card drifts right with a TRY IT stamp, then snaps back. */
+@keyframes landing-swipe {
+  0%, 30% { transform: translateX(0) rotate(0); }
+  55%, 70% { transform: translateX(40px) rotate(6deg); }
+  85%, 100% { transform: translateX(0) rotate(0); }
+}
+@keyframes landing-stamp {
+  0%, 35% { opacity: 0; }
+  50%, 70% { opacity: 1; }
+  85%, 100% { opacity: 0; }
+}
+.landing-swipe { animation: landing-swipe 3.5s ease-in-out infinite; }
+.landing-stamp { animation: landing-stamp 3.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .landing-swipe, .landing-stamp { animation: none; }
+}
