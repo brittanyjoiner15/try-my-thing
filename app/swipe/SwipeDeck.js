@@ -6,6 +6,7 @@ import posthog from "posthog-js";
 import { swipe, swipeBuilder } from "@/app/actions";
 import { Logo } from "@/app/components/ProductProfile";
 import Avatar from "@/app/components/Avatar";
+import InviteButton from "@/app/components/InviteButton";
 
 const THRESHOLD = 110; // px of drag before a release counts as a swipe
 const TAP = 6; // px of movement still treated as a tap (flips the card's page)
@@ -362,14 +363,20 @@ function BuilderFooter({ card }) {
   );
 }
 
+// Empty decks are common while the app is small, so they point at the two things that refill them.
 function ProductsEmpty() {
   return (
     <>
       <h1 className="text-2xl font-bold">You&apos;ve seen everything</h1>
-      <p className="mt-2 text-muted">New products show up as builders post them. Building something yourself?</p>
-      <Link href="/products" className="btn-primary mt-4">
-        Post my product
-      </Link>
+      <p className="mt-2 text-muted">
+        New products show up as builders join. Know someone who&apos;s building something? Send them the link.
+      </p>
+      <div className="mt-4 flex flex-col gap-2">
+        <InviteButton source="products_empty" label="Invite a builder" />
+        <Link href="/products" className="btn-ghost">
+          Post my product
+        </Link>
+      </div>
     </>
   );
 }
@@ -378,10 +385,13 @@ function BuildersEmpty() {
   return (
     <>
       <h1 className="text-2xl font-bold">You&apos;ve met everyone</h1>
-      <p className="mt-2 text-muted">New builders show up as they join. Check your matches in the meantime.</p>
-      <Link href="/matches" className="btn-primary mt-4">
-        See my matches
-      </Link>
+      <p className="mt-2 text-muted">New builders show up as they join. Invite someone you&apos;d want to meet.</p>
+      <div className="mt-4 flex flex-col gap-2">
+        <InviteButton source="builders_empty" label="Invite a builder" />
+        <Link href="/matches" className="btn-ghost">
+          See my matches
+        </Link>
+      </div>
     </>
   );
 }

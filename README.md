@@ -7,6 +7,7 @@ Tinder for trying software, from the PostHog community. Builders post what they'
 ## How it works
 - `/login`: email magic link.
 - `/onboarding`: name, role, stack, builder fields, and a notice that name, email, and profile are shared with matches (`consent_at` records the first save).
+- `/welcome`: shown once after onboarding. Three steps on how the app works, then "Post my thing" or "Just swipe for now".
 - `/products`: builders post a product and see how many testers matched.
 - `/products/[id]`: the product's Hinge-style profile (logo, phone screenshot, platforms, up to 3 prompt answers). The swipe card shows the same thing. `/products/[id]/edit` lets the owner change it. Prompt and platform lists live in `lib/product-options.js`.
 - `/swipe`: testers swipe. A Products / Builders toggle at the top switches decks (see below). A right swipe saves the match and shows the builder's email plus a pre-written intro email. Products drop out of the deck once they hit their tester limit. Each tester gets max 3 right swipes per week.

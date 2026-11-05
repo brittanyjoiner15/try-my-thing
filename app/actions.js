@@ -99,7 +99,7 @@ export async function saveProfile(formData) {
     revalidatePath("/profile");
     redirect("/profile?saved=1");
   }
-  redirect("/swipe");
+  redirect("/welcome"); // first save: show the short how-it-works screen once
 }
 
 // Text fields shared by "post" and "edit". Only known platforms and prompts get through.
