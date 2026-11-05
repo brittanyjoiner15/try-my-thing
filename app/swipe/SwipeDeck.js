@@ -14,7 +14,8 @@ const TAP = 6; // px of movement still treated as a tap (flips the card's page)
 const KINDS = {
   products: {
     action: swipe,
-    event: "product swiped",
+    event: "product_swiped",
+    matchEvent: "product_match_created",
     eventProp: "product_id",
     yes: "♥ Try it",
     stamp: "TRY IT",
@@ -26,7 +27,8 @@ const KINDS = {
   },
   builders: {
     action: swipeBuilder,
-    event: "builder swiped",
+    event: "builder_swiped",
+    matchEvent: "builder_match_created",
     eventProp: "builder_id",
     yes: "♥ Connect",
     stamp: "CONNECT",
@@ -57,12 +59,19 @@ export default function SwipeDeck({ kind, initialCards }) {
     if (!card || flying) return;
     setFlying(direction);
     setMessage(null);
-    posthog.capture(k.event, { direction, [k.eventProp]: card.id });
 
     startTransition(async () => {
       const result = await k.action(card.id, direction);
-      if (result?.error) setMessage({ type: "error", text: result.error });
-      else if (result?.match) setMatch(result.match);
+      if (result?.error) {
+        setMessage({ type: "error", text: result.error });
+        return;
+      }
+
+      posthog.capture(k.event, { direction, [k.eventProp]: card.id });
+      if (result?.match) {
+        posthog.capture(k.matchEvent);
+        setMatch(result.match);
+      }
     });
 
     // Let the fly-out animation play, then drop the card.
@@ -267,10 +276,14 @@ function MatchScreen({ match, onDone }) {
         {first} wants testers for {match.product}. Email them to get access. They&apos;ll see you on their matches page too.
       </p>
 
-      <p className="mt-6 rounded-lg border border-border px-4 py-3 font-mono text-sm">{match.builderEmail}</p>
+      <p className="ph-no-capture mt-6 rounded-lg border border-border px-4 py-3 font-mono text-sm">{match.builderEmail}</p>
 
       <div className="mt-4 flex flex-col gap-2">
-        <a href={match.mailto} className="btn-primary">
+        <a
+          href={match.mailto}
+          className="btn-primary"
+          onClick={() => posthog.capture("match_outreach_started", { match_type: "product" })}
+        >
           Email {first} (pre-written)
         </a>
         <button
@@ -382,7 +395,7 @@ function BuilderMatchScreen({ match, onDone }) {
       <h1 className="text-3xl font-bold">You and {first} matched</h1>
       <p className="mt-2 text-muted">You both swiped right. Say hi. They&apos;ll see you on their matches page too.</p>
 
-      <p className="mt-6 rounded-lg border border-border px-4 py-3 font-mono text-sm">{match.email}</p>
+      <p className="ph-no-capture mt-6 rounded-lg border border-border px-4 py-3 font-mono text-sm">{match.email}</p>
       <div className="mt-2 flex justify-center gap-4 text-sm">
         {match.github_url && (
           <a href={match.github_url} target="_blank" rel="noreferrer" className="text-accent underline">GitHub ↗</a>
@@ -393,7 +406,11 @@ function BuilderMatchScreen({ match, onDone }) {
       </div>
 
       <div className="mt-4 flex flex-col gap-2">
-        <a href={match.mailto} className="btn-primary">
+        <a
+          href={match.mailto}
+          className="btn-primary"
+          onClick={() => posthog.capture("match_outreach_started", { match_type: "builder" })}
+        >
           Email {first} (pre-written)
         </a>
         <button

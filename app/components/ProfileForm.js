@@ -1,11 +1,18 @@
+"use client";
+
 // Onboarding and /profile share this form. Pass `profile` to prefill it.
+import posthog from "posthog-js";
 import { saveProfile } from "@/app/actions";
 import ImageInput from "./ImageInput";
 import { ROLES, TOPICS, LOOKING_FOR, TOPICS_MAX, BUILDING_MAX } from "@/lib/profile-options";
 
 export default function ProfileForm({ profile, title, intro, submitLabel }) {
   return (
-    <form action={saveProfile} className="panel mx-auto max-w-xl space-y-5">
+    <form
+      action={saveProfile}
+      className="panel mx-auto max-w-xl space-y-5"
+      onSubmit={() => posthog.capture(profile ? "profile_updated" : "profile_created")}
+    >
       <div>
         <h1 className="text-2xl font-bold">{title}</h1>
         <p className="mt-1 text-muted">{intro}</p>

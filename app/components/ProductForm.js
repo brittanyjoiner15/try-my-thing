@@ -1,10 +1,17 @@
+"use client";
+
 // "Post a product" and "Edit product" share this form. Pass `product` to prefill it.
+import posthog from "posthog-js";
 import ImageInput from "./ImageInput";
 import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX } from "@/lib/product-options";
 
 export default function ProductForm({ action, product, title, intro, submitLabel }) {
   return (
-    <form action={action} className="panel space-y-6">
+    <form
+      action={action}
+      className="panel space-y-6"
+      onSubmit={() => posthog.capture(product ? "product_updated" : "product_created")}
+    >
       <div>
         <h2 className="text-2xl font-bold">{title}</h2>
         <p className="mt-1 text-muted">{intro}</p>

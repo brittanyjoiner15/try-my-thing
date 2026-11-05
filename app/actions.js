@@ -11,6 +11,7 @@ import { introMailto, builderIntroMailto } from "@/lib/intro";
 import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TYPES } from "@/lib/product-options";
 import { ROLES, TOPICS, LOOKING_FOR, TOPICS_MAX, BUILDING_MAX } from "@/lib/profile-options";
 import { geocode } from "@/lib/geocode";
+import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
 
 // Keeps testers from right-swiping everything and flooding builders with no-shows.
 const MAX_RIGHT_SWIPES_PER_WEEK = 3;
@@ -68,11 +69,12 @@ export async function saveProfile(formData) {
   const role = field(formData, "role");
   // Same public bucket as product images, under avatars/ so the two never collide.
   const avatarUrl = await uploadPicked(formData, "avatar", `avatars/${user.id}`);
+  const profileRole = ROLES.includes(role) ? role : "other";
   await data.saveProfile({
     id: user.id,
     email: user.email,
     name: field(formData, "name"),
-    role: ROLES.includes(role) ? role : "other",
+    role: profileRole,
     stack: field(formData, "stack"),
     interests: field(formData, "interests") || null,
     discord_handle: field(formData, "discord_handle") || null,
@@ -86,6 +88,12 @@ export async function saveProfile(formData) {
     linkedin_url: profileUrl(field(formData, "linkedin_url"), "linkedin.com"),
     avatar_url: avatarUrl ?? existing?.avatar_url ?? null,
   });
+  logPostHogAction("profile saved", {
+    event: "profile_saved",
+    profile_state: existing ? "updated" : "created",
+    role: profileRole,
+  });
+  await flushPostHogLogs();
 
   if (existing) {
     revalidatePath("/profile");
@@ -148,6 +156,8 @@ export async function createProduct(formData) {
     ...productFields(formData),
     ...(await productImages(formData, id)),
   });
+  logPostHogAction("product created", { event: "product_created" });
+  await flushPostHogLogs();
   revalidatePath("/products");
   redirect(`/products/${id}`);
 }
@@ -192,6 +202,11 @@ export async function swipe(productId, direction) {
   const { duplicate } = await data.insertSwipe({ tester_id: user.id, product_id: productId, direction });
   if (duplicate) return { error: "You already swiped on this one." };
 
+  logPostHogAction("product swipe recorded", {
+    event: "product_swipe_recorded",
+    direction,
+  });
+  await flushPostHogLogs();
   revalidatePath("/matches");
   if (direction === "left") return { ok: true };
   return {

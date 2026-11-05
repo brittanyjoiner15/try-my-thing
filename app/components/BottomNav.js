@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import posthog from "posthog-js";
 
 // App-style tab bar pinned to the bottom of the screen. Icon paths are Heroicons (outline, MIT).
 const ICONS = {
@@ -26,8 +28,29 @@ function Icon({ name }) {
 
 const tab = "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-semibold";
 
-export default function BottomNav({ showAdmin }) {
+export default function BottomNav({ showAdmin, userId, userEmail }) {
   const pathname = usePathname();
+  const previousUserId = useRef(null);
+
+  useEffect(() => {
+    if (previousUserId.current && previousUserId.current !== userId) {
+      posthog.reset();
+    }
+
+    posthog.identify(userId, { email: userEmail });
+    previousUserId.current = userId;
+  }, [userEmail, userId]);
+
+  useEffect(() => {
+    const resetOnSignOut = (event) => {
+      if (event.target.closest("[data-posthog-sign-out]")) {
+        posthog.reset();
+      }
+    };
+
+    document.addEventListener("submit", resetOnSignOut);
+    return () => document.removeEventListener("submit", resetOnSignOut);
+  }, []);
   const tabs = [
     { href: "/swipe", label: "Swipe", icon: "swipe" },
     { href: "/matches", label: "Matches", icon: "matches" },
