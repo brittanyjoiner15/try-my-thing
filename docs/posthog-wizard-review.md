@@ -36,7 +36,10 @@ What the PostHog wizard changed in this app, what a review (Claude Code, 2026-11
 | `product_created` / `product_updated` | `app/components/ProductForm.js` | Product form submitted |
 | `product_swiped` / `builder_swiped` | `app/swipe/SwipeDeck.js` | Swipe saved on the server (renamed from `product swiped` / `builder swiped`) |
 | `product_match_created` / `builder_match_created` | `app/swipe/SwipeDeck.js` | A swipe returns a match |
-| `match_outreach_started` | `app/swipe/SwipeDeck.js` | "Email (pre-written)" button clicked on a match screen |
+| `match_outreach_started` | `app/swipe/SwipeDeck.js` | "Message" tapped on the builder match screen (`match_type: builder`). The product version went away with chat: testers can't message until the builder accepts. |
+| `tester_request_answered` | `app/matches/RespondButtons.js` | Builder taps Accept or Pass. Props: `accepted`, `chat_id`, `product_id`, `hours_waiting` |
+| `chat_opened` | `app/matches/[chatId]/ChatThread.js` | A chat page loads. Props: `chat_id`, `chat_type`, `status`, `message_count` |
+| `message_sent` | `app/matches/[chatId]/ChatThread.js` | A message is saved. Props (worked out on the server): `chat_id`, `chat_type` (product/builder), `sender_side` (tester/builder/builder_match), `is_first_message`, `is_reply`, `hours_since_match`, `message_length`, plus `was_draft` (sent the pre-written intro unedited) |
 
 `ProfileForm` and `ProductForm` became client components (`"use client"`) so they can call `posthog.capture`.
 

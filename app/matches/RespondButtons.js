@@ -13,7 +13,7 @@ export default function RespondButtons({ chatId }) {
     startTransition(async () => {
       const result = await respondToTester(chatId, accept);
       if (result?.error) return setError(result.error);
-      posthog.capture("tester_request_answered", { chat_id: chatId, accepted: accept });
+      posthog.capture("tester_request_answered", { chat_id: chatId, accepted: accept, ...result.stats });
     });
 
   return (

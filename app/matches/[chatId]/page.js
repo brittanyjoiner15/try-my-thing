@@ -56,6 +56,7 @@ export default async function ChatPage({ params }) {
       <ChatThread
         key={chat.status}
         chatId={chatId}
+        chatType={product ? "product" : "builder"}
         meId={user.id}
         themName={them.name}
         initialMessages={messages}

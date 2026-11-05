@@ -264,6 +264,8 @@ export async function setProductHidden(productId, hidden) {
 
 // --- Chat ---
 
+const hoursSince = (iso) => Math.round(((Date.now() - new Date(iso)) / 36e5) * 10) / 10; // one decimal
+
 // The builder accepts (opens the chat) or declines a tester's request.
 export async function respondToTester(chatId, accept) {
   const { user, profile } = await requireProfile();
@@ -271,7 +273,14 @@ export async function respondToTester(chatId, accept) {
   if (!chat?.product || chat.product.owner_id !== user.id || chat.status !== "pending") return { error: "That request isn't waiting on you." };
 
   await data.setChatStatus(chatId, accept ? "open" : "declined");
-  logPostHogAction("tester request answered", { event: "tester_request_answered", accepted: accept });
+  const hoursWaiting = hoursSince(chat.created_at);
+  logPostHogAction("tester request answered", {
+    event: "tester_request_answered",
+    accepted: accept,
+    chat_id: chatId,
+    product_id: chat.product.id,
+    hours_waiting: hoursWaiting,
+  });
   await flushPostHogLogs();
   if (accept) {
     const [tester, chatUrl] = [await data.getProfile(chat.user_a), `${await appUrl()}/matches/${chatId}`];
@@ -279,10 +288,23 @@ export async function respondToTester(chatId, accept) {
   }
   revalidatePath("/matches");
   revalidatePath(`/matches/${chatId}`);
-  return { ok: true };
+  return { ok: true, stats: { product_id: chat.product.id, hours_waiting: hoursWaiting } };
 }
 
-// Returns { error } or { message }. Emails the other person only if this is the first message
+// What every message analytics event carries, so PostHog can answer: how many matches start a chat,
+// how many get a reply, who goes first, and how long after matching. Read before the insert updates the chat.
+function messageStats(chat, userId) {
+  return {
+    chat_id: chat.id,
+    chat_type: chat.product ? "product" : "builder",
+    sender_side: !chat.product ? "builder_match" : chat.product.owner_id === userId ? "builder" : "tester",
+    is_first_message: !chat.last_message_at, // this message starts the conversation
+    is_reply: Boolean(chat.last_sender_id) && chat.last_sender_id !== userId, // answering the other person
+    hours_since_match: hoursSince(chat.created_at),
+  };
+}
+
+// Returns { error } or { message, stats }. Emails the other person only if this is the first message
 // since they last opened the chat, so a burst of messages sends one email.
 export async function sendMessage(chatId, text) {
   const { user, profile } = await requireProfile();
@@ -299,6 +321,7 @@ export async function sendMessage(chatId, text) {
     return { error: "You're sending a lot of messages. Take a breather and try again in a few minutes." };
   }
 
+  const stats = { ...messageStats(chat, user.id), message_length: body.length };
   const message = await data.insertMessage({ chat_id: chatId, sender_id: user.id, body });
   await data.touchChat(chatId, chat.me, "read"); // sending counts as reading
 
@@ -310,9 +333,9 @@ export async function sendMessage(chatId, text) {
     after(() => sendNewMessageEmail({ to, from: profile, body, chatUrl }));
   }
 
-  logPostHogAction("message sent", { event: "message_sent", chat_type: chat.product ? "product" : "builder" });
+  logPostHogAction("message sent", { event: "message_sent", ...stats });
   await flushPostHogLogs();
-  return { message };
+  return { message, stats };
 }
 
 // Called every few seconds by the open chat page. Returns messages newer than sinceIso and marks the chat read.

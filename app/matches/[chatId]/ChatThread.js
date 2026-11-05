@@ -9,7 +9,7 @@ const MESSAGE_MAX = 2000; // same limit as app/actions.js
 
 const time = (iso) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-export default function ChatThread({ chatId, meId, themName, initialMessages, initialStatus, iAmBuilder, draft }) {
+export default function ChatThread({ chatId, chatType, meId, themName, initialMessages, initialStatus, iAmBuilder, draft }) {
   const [messages, setMessages] = useState(initialMessages);
   const [status, setStatus] = useState(initialStatus);
   const [text, setText] = useState(draft);
@@ -24,7 +24,8 @@ export default function ChatThread({ chatId, meId, themName, initialMessages, in
   }, [messages.length]);
 
   useEffect(() => {
-    posthog.capture("chat_opened", { chat_id: chatId, status: initialStatus });
+    posthog.capture("chat_opened", { chat_id: chatId, chat_type: chatType, status: initialStatus, message_count: initialMessages.length });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per open, not every time a message arrives
   }, [chatId, initialStatus]);
 
   // Poll for new messages while the tab is visible. Also picks up the builder accepting a pending chat.
@@ -54,7 +55,8 @@ export default function ChatThread({ chatId, meId, themName, initialMessages, in
     startSending(async () => {
       const result = await sendMessage(chatId, body);
       if (result?.error) return setError(result.error);
-      posthog.capture("message_sent", { chat_id: chatId, was_draft: body === draft.trim() });
+      // stats come from the server (first message? reply? who sent it?). was_draft = sent the pre-written intro unedited.
+      posthog.capture("message_sent", { ...result.stats, was_draft: Boolean(draft) && body === draft.trim() });
       setMessages((m) => merge(m, [result.message]));
       setText("");
     });
