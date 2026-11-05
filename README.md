@@ -7,7 +7,8 @@ Tinder for trying software, from the PostHog community. Builders post what they'
 ## How it works
 - `/login`: email magic link.
 - `/onboarding`: name, role, stack, and the consent checkbox for sharing name and email with matches.
-- `/products`: builders post a product card and see how many testers matched.
+- `/products`: builders post a product and see how many testers matched.
+- `/products/[id]`: the product's Hinge-style profile (logo, phone screenshot, platforms, up to 3 prompt answers). The swipe card shows the same thing. `/products/[id]/edit` lets the owner change it. Prompt and platform lists live in `lib/product-options.js`.
 - `/swipe`: testers swipe. A right swipe saves the match and shows the builder's email plus a pre-written intro email. Products drop out of the deck once they hit their tester limit. Each tester gets max 3 right swipes per week.
 - `/matches`: builders see who wants to try their stuff; testers see what they matched with. Both with emails.
 - `/admin`: all matches, and hide/unhide products. Only emails in `ADMIN_EMAILS` can open it.
@@ -21,7 +22,7 @@ All data access goes through `lib/data/index.js`, which picks `mock.js` or `supa
 
 ## Run it with Supabase
 1. Create a Supabase project at supabase.com.
-2. In Supabase, open **SQL Editor**, paste `supabase/migrations/20261103000000_init.sql`, and run it.
+2. In Supabase, open **SQL Editor** and run each file in `supabase/migrations/`, oldest first. The second one adds the `product-images` storage bucket.
 3. In Supabase, go to **Authentication → URL Configuration** and add `http://localhost:3000/auth/callback` to Redirect URLs.
 4. `cp .env.example .env.local` and fill it in.
 5. `pnpm install && pnpm dev`, then open http://localhost:3000.

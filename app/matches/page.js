@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { requireProfile } from "@/lib/session";
 import { getMatches } from "@/lib/data";
+import { introMailto } from "@/lib/intro";
 
 const day = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 export default async function MatchesPage() {
-  const { user } = await requireProfile();
+  const { user, profile } = await requireProfile();
   const { tried, testers } = await getMatches(user.id);
 
   return (
@@ -40,7 +41,7 @@ export default async function MatchesPage() {
 
       <section>
         <h2 className="text-2xl font-bold">Products you want to try</h2>
-        <p className="mt-1 text-muted">Email the builder to get access. That part&apos;s on you.</p>
+        <p className="mt-1 text-muted">Email the builder to get access. The pre-written email does the awkward part.</p>
         <div className="mt-4 space-y-2">
           {tried.map((m, i) => (
             <div key={i} className="panel flex flex-wrap items-center justify-between gap-4 py-4">
@@ -50,9 +51,14 @@ export default async function MatchesPage() {
                 </p>
                 <p className="text-sm text-muted">matched {day(m.created_at)}</p>
               </div>
-              <a href={`mailto:${m.builder.email}`} className="btn-ghost text-sm">
-                {m.builder.email}
-              </a>
+              <div className="flex flex-wrap gap-2">
+                <a href={introMailto({ product: m.product, builder: m.builder, tester: profile })} className="btn-primary text-sm">
+                  Email {m.builder.name.split(" ")[0]} (pre-written)
+                </a>
+                <a href={`mailto:${m.builder.email}`} className="btn-ghost text-sm">
+                  {m.builder.email}
+                </a>
+              </div>
             </div>
           ))}
           {tried.length === 0 && (
