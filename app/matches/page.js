@@ -27,7 +27,7 @@ export default async function MatchesPage() {
                   {m.tester.discord_handle && ` · Discord: ${m.tester.discord_handle}`} · matched {day(m.created_at)}
                 </p>
               </div>
-              <a href={`mailto:${m.tester.email}`} className="btn-ghost text-sm">
+              <a href={`mailto:${m.tester.email}`} className="ph-no-capture btn-ghost text-sm">
                 {m.tester.email}
               </a>
             </div>
@@ -56,7 +56,7 @@ export default async function MatchesPage() {
                 <a href={introMailto({ product: m.product, builder: m.builder, tester: profile })} className="btn-primary text-sm">
                   Email {m.builder.name.split(" ")[0]} (pre-written)
                 </a>
-                <a href={`mailto:${m.builder.email}`} className="btn-ghost text-sm">
+                <a href={`mailto:${m.builder.email}`} className="ph-no-capture btn-ghost text-sm">
                   {m.builder.email}
                 </a>
               </div>
@@ -105,7 +105,7 @@ export default async function MatchesPage() {
                 <a href={builderIntroMailto({ me: profile, them: builder })} className="btn-primary text-sm">
                   Email {builder.name.split(" ")[0]} (pre-written)
                 </a>
-                <a href={`mailto:${builder.email}`} className="btn-ghost text-sm">
+                <a href={`mailto:${builder.email}`} className="ph-no-capture btn-ghost text-sm">
                   {builder.email}
                 </a>
               </div>

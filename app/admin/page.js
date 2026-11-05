@@ -32,10 +32,10 @@ export default async function AdminPage() {
                 <tr key={i} className="border-b border-border last:border-0">
                   <td className="p-3">{day(m.created_at)}</td>
                   <td className="p-3">
-                    {m.product.name} <span className="text-muted">({m.builder.name}, {m.builder.email})</span>
+                    {m.product.name} <span className="ph-no-capture text-muted">({m.builder.name}, {m.builder.email})</span>
                   </td>
                   <td className="p-3">
-                    {m.tester.name} <span className="text-muted">({m.tester.email})</span>
+                    {m.tester.name} <span className="ph-no-capture text-muted">({m.tester.email})</span>
                   </td>
                 </tr>
               ))}
@@ -60,7 +60,7 @@ export default async function AdminPage() {
                 </a>{" "}
                 {p.hidden && <span className="text-sm text-muted">(hidden)</span>}
                 <p className="text-sm text-muted">
-                  {p.owner.name} · {p.owner.email} · {p.matches} matches / {p.views} views
+                  {p.owner.name} · <span className="ph-no-capture">{p.owner.email}</span> · {p.matches} matches / {p.views} views
                 </p>
               </div>
               <form action={setProductHidden.bind(null, p.id, !p.hidden)}>

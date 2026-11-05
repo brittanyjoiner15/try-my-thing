@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import posthog from "posthog-js";
 import { sendMagicLink } from "@/app/actions";
 
 function LoginForm() {
@@ -21,13 +22,13 @@ function LoginForm() {
   }
 
   return (
-    <form action={action} className="panel">
+    <form action={action} className="panel" onSubmit={() => posthog.capture("magic_link_requested")}>
       <h1 className="text-2xl font-bold">Sign in</h1>
       <p className="mt-2 text-muted">No password. We&apos;ll email you a link.</p>
       <label className="label mt-6" htmlFor="email">
         Email
       </label>
-      <input id="email" name="email" type="email" required className="input" placeholder="you@company.com" />
+      <input id="email" name="email" type="email" required className="ph-no-capture input" placeholder="you@company.com" />
       {(state.error || linkError) && (
         <p className="mt-3 text-sm text-red-600">
           {state.error ?? "That link didn't work. It may have expired or been opened in another browser. Try again."}
