@@ -25,6 +25,10 @@ export default async function Home() {
               Post my product
             </Link>
           </div>
+          {/* Plain <a>, not <Link>: /demo is a route handler that sets a cookie, so it shouldn't be prefetched. */}
+          <a href="/demo" className="mt-4 inline-block text-sm font-semibold text-accent underline">
+            Look around first, no account needed →
+          </a>
         </div>
         <CardStack />
       </section>

@@ -15,12 +15,17 @@ Tinder for trying software, from the PostHog community. Builders post what they'
 - `/matches/[chatId]`: the chat. It checks for new messages every 5 seconds (no realtime, see the privacy model). The first message is pre-written from `lib/intro.js`. Max 2,000 characters per message and 30 messages per 10 minutes. The other person gets one email per unread stretch, not one per message.
 - `/swipe?mode=builders`: builders who opted in swipe on each other. Ranked by distance, shared problem spaces, shared stack, and what they're looking for (`lib/builder-match.js`). Mutual right swipe = match, and only then do a chat and GitHub/LinkedIn links open up. Both builders get an email. No weekly limit.
 - `/profile`: edit your profile, including the builder fields and the "Show me to other builders" opt-in. City is geocoded with OpenStreetMap Nominatim (`lib/geocode.js`) and stored rounded to ~10 km. Sign out lives here.
+- `/demo`: try the app on fake data without an account (see Demo mode).
 - `/admin`: all matches, and hide/unhide products. Only emails in `ADMIN_EMAILS` can open it.
 
 **Privacy model:** RLS is on with no policies, so the browser can't read any table. Server code checks who's logged in, then reads with the secret key. Emails are only shown to admins. Matches talk through `chats` and `messages`, which the browser reads through server actions, so realtime would need RLS policies and a browser Supabase client.
 
-## Demo mode (no setup)
-`pnpm install && pnpm dev` with no `.env.local`. The app runs on fake data in `lib/data/mock.js`, signed in as "Demo You" (who is also an admin). Swipes and new products are kept in memory until the server restarts.
+## Demo mode
+Two ways in, both on the fake data in `lib/data/mock.js`, signed in as "Demo You":
+- **`/demo` on the real site:** for showing the app to people without an account. It sets a `tmt_demo` cookie, gives that browser its own copy of the fake data, and opens `/swipe`. An orange banner has "Exit demo". Nothing reaches Supabase, no emails are sent, `/admin` is hidden, and PostHog events carry `is_demo: true` (visitors aren't identified). The data lives in server memory, so on Netlify it resets whenever a function instance restarts. Linked from the landing and login pages.
+- **No setup (local):** `pnpm install && pnpm dev` with no `.env.local`. The whole server is one shared demo, and Demo You is also an admin. Emails print to the console.
+
+In demo chats the other person answers a few seconds after you send a message (canned replies in `mock.js`). Product logos and screenshots are SVGs in `public/demo/`, drawn by `node scripts/generate-demo-images.mjs`.
 
 All data access goes through `lib/data/index.js`, which picks `mock.js` or `supabase.js`. Add a function to both when you need new data.
 

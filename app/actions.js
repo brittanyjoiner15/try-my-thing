@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAuthClient } from "@/lib/supabase/server";
-import { DEMO } from "@/lib/demo";
+import { DEMO_ENV, isDemo } from "@/lib/demo";
 import { getUser, requireProfile, requireAdmin } from "@/lib/session";
 import * as data from "@/lib/data";
 import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TYPES } from "@/lib/product-options";
@@ -25,6 +25,17 @@ async function appUrl() {
   return (await headers()).get("origin") ?? process.env.URL ?? "http://localhost:3000";
 }
 
+// Server logs carry is_demo so /demo visitors can be filtered out of (or into) the real numbers.
+async function logAction(body, attributes) {
+  logPostHogAction(body, { ...attributes, is_demo: await isDemo() });
+}
+
+// Match and message emails. /demo people have fake addresses, so nothing is sent for them.
+// Local demo (no keys) still runs it, and lib/match-emails.js prints the email to the console instead.
+async function emailAfterResponse(send) {
+  if (DEMO_ENV || !(await isDemo())) after(send);
+}
+
 const field = (formData, name) => String(formData.get(name) ?? "").trim();
 
 export async function sendMagicLink(_prevState, formData) {
@@ -42,7 +53,7 @@ export async function sendMagicLink(_prevState, formData) {
 }
 
 export async function signOut() {
-  if (!DEMO) {
+  if (!DEMO_ENV) {
     const supabase = await createAuthClient();
     await supabase.auth.signOut();
   }
@@ -97,7 +108,7 @@ export async function saveProfile(formData) {
     linkedin_url: profileUrl(field(formData, "linkedin_url"), "linkedin.com"),
     avatar_url: avatarUrl ?? existing?.avatar_url ?? null,
   });
-  logPostHogAction("profile saved", {
+  await logAction("profile saved", {
     event: "profile_saved",
     profile_state: existing ? "updated" : "created",
     role: profileRole,
@@ -165,7 +176,7 @@ export async function createProduct(formData) {
     ...productFields(formData),
     ...(await productImages(formData, id)),
   });
-  logPostHogAction("product created", { event: "product_created" });
+  await logAction("product created", { event: "product_created" });
   await flushPostHogLogs();
   revalidatePath("/products");
   redirect(`/products/${id}`);
@@ -211,7 +222,7 @@ export async function swipe(productId, direction) {
   const { duplicate } = await data.insertSwipe({ tester_id: user.id, product_id: productId, direction });
   if (duplicate) return { error: "You already swiped on this one." };
 
-  logPostHogAction("product swipe recorded", {
+  await logAction("product swipe recorded", {
     event: "product_swipe_recorded",
     direction,
   });
@@ -222,7 +233,7 @@ export async function swipe(productId, direction) {
   // The chat starts pending: the tester can't message until the builder accepts.
   const chat = await data.createChat({ user_a: user.id, user_b: product.owner_id, product_id: productId, status: "pending" });
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
-  after(() => sendProductMatchEmails({ product, builder: product.owner, tester: profile, chatUrl }));
+  await emailAfterResponse(() => sendProductMatchEmails({ product, builder: product.owner, tester: profile, chatUrl }));
   return { ok: true, match: { product: product.name, builderName: product.owner.name, chatId: chat.id } };
 }
 
@@ -252,7 +263,7 @@ export async function swipeBuilder(builderId, direction) {
   const chat = await data.createChat({ user_a, user_b, status: "open" });
   revalidatePath("/matches");
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
-  after(() => sendBuilderMatchEmails({ a: profile, b: other, chatUrl }));
+  await emailAfterResponse(() => sendBuilderMatchEmails({ a: profile, b: other, chatUrl }));
   return { ok: true, match: { name: other.name, chatId: chat.id } };
 }
 
@@ -274,7 +285,7 @@ export async function respondToTester(chatId, accept) {
 
   await data.setChatStatus(chatId, accept ? "open" : "declined");
   const hoursWaiting = hoursSince(chat.created_at);
-  logPostHogAction("tester request answered", {
+  await logAction("tester request answered", {
     event: "tester_request_answered",
     accepted: accept,
     chat_id: chatId,
@@ -284,7 +295,7 @@ export async function respondToTester(chatId, accept) {
   await flushPostHogLogs();
   if (accept) {
     const [tester, chatUrl] = [await data.getProfile(chat.user_a), `${await appUrl()}/matches/${chatId}`];
-    after(() => sendChatAcceptedEmail({ product: chat.product, builder: profile, tester, chatUrl }));
+    await emailAfterResponse(() => sendChatAcceptedEmail({ product: chat.product, builder: profile, tester, chatUrl }));
   }
   revalidatePath("/matches");
   revalidatePath(`/matches/${chatId}`);
@@ -319,7 +330,7 @@ export async function sendMessage(chatId, text) {
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   if ((await data.countRecentMessages(user.id, tenMinAgo)) >= MAX_MESSAGES_PER_10_MIN) {
     // Our own limit, not an outage. Logged so we can see if it's set too low for real conversations.
-    logPostHogAction("message rate limited", { event: "message_rate_limited", chat_id: chatId, limit: MAX_MESSAGES_PER_10_MIN });
+    await logAction("message rate limited", { event: "message_rate_limited", chat_id: chatId, limit: MAX_MESSAGES_PER_10_MIN });
     await flushPostHogLogs();
     return { error: "You're sending a lot of messages. Take a breather and try again in a few minutes." };
   }
@@ -333,10 +344,10 @@ export async function sendMessage(chatId, text) {
   if (!notifiedAt || (readAt && readAt > notifiedAt)) {
     await data.touchChat(chatId, them, "notified");
     const [to, chatUrl] = [await data.getProfile(chat.them.id), `${await appUrl()}/matches/${chatId}`];
-    after(() => sendNewMessageEmail({ to, from: profile, body, chatUrl }));
+    await emailAfterResponse(() => sendNewMessageEmail({ to, from: profile, body, chatUrl }));
   }
 
-  logPostHogAction("message sent", { event: "message_sent", ...stats });
+  await logAction("message sent", { event: "message_sent", ...stats });
   await flushPostHogLogs();
   return { message, stats };
 }
