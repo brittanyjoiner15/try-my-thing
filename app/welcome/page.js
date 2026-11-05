@@ -15,14 +15,14 @@ export default async function WelcomePage() {
 
       <ol className="space-y-4">
         <Step n="1" title="Swipe on products">
-          ♥ Try it shows you the builder&apos;s email and a pre-written intro. ✕ skips. You get 3 tries a week, so save
+          ♥ Try it sends the builder a request. When they accept, you chat in the app. ✕ skips. You get 3 tries a week, so save
           them for things you&apos;d really use.
         </Step>
         <Step n="2" title="Post your thing">
-          Building something? Add it, and testers swipe on it. You&apos;ll see who matched on My products.
+          Building something? Add it, and testers swipe on it. Accept the testers you want on Matches, then chat.
         </Step>
         <Step n="3" title="Meet other builders">
-          Turn on builder matching to swipe on each other. You only swap emails when you both swipe right.
+          Turn on builder matching to swipe on each other. When you both swipe right, a chat opens.
         </Step>
       </ol>
 

@@ -36,7 +36,10 @@ What the PostHog wizard changed in this app, what a review (Claude Code, 2026-11
 | `product_created` / `product_updated` | `app/components/ProductForm.js` | Product form submitted |
 | `product_swiped` / `builder_swiped` | `app/swipe/SwipeDeck.js` | Swipe saved on the server (renamed from `product swiped` / `builder swiped`) |
 | `product_match_created` / `builder_match_created` | `app/swipe/SwipeDeck.js` | A swipe returns a match |
-| `match_outreach_started` | `app/swipe/SwipeDeck.js` | "Email (pre-written)" button clicked on a match screen |
+| `match_outreach_started` | `app/swipe/SwipeDeck.js` | "Message" tapped on the builder match screen (`match_type: builder`). The product version went away with chat: testers can't message until the builder accepts. |
+| `tester_request_answered` | `app/matches/RespondButtons.js` | Builder taps Accept or Pass. Props: `accepted`, `chat_id`, `product_id`, `hours_waiting` |
+| `chat_opened` | `app/matches/[chatId]/ChatThread.js` | A chat page loads. Props: `chat_id`, `chat_type`, `status`, `message_count` |
+| `message_sent` | `app/matches/[chatId]/ChatThread.js` | A message is saved. Props (worked out on the server): `chat_id`, `chat_type` (product/builder), `sender_side` (tester/builder/builder_match), `is_first_message`, `is_reply`, `hours_since_match`, `message_length`, plus `was_draft` (sent the pre-written intro unedited) |
 
 `ProfileForm` and `ProductForm` became client components (`"use client"`) so they can call `posthog.capture`.
 
@@ -94,6 +97,8 @@ There's no event for "signed in" or "created an account" today. Add `user_signed
 
 **7. Capture server errors too.**
 `capture_exceptions` and `global-error.js` only catch browser-side crashes. Errors in server actions and server components (Supabase failures, upload errors) aren't tracked. Add `onRequestError` in `instrumentation.js` and send the error with `posthog-node`'s `captureException`.
+
+**Done (2026-11-05, chat PR):** `instrumentation.js` exports `onRequestError`, which sends server errors to Error tracking through `lib/posthog-server.js`. Failed Resend emails (they run in `after()`, so `onRequestError` doesn't see them) are reported from `lib/match-emails.js` with `limit: "resend"` on a 429. The chat page reports the first failed poll in a streak (`feature: "chat"`), not one per 5s. Supabase errors keep their `code`. Our own message rate limit goes to Logs as `message_rate_limited`.
 
 **8. Add properties to the match events.**
 `product_match_created` and `builder_match_created` have no properties. Add `product_id` or `builder_id` so you can see which products get matches.

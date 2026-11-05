@@ -16,7 +16,7 @@ export default async function Home() {
             <br />
             on software.
           </h1>
-          <p className="mt-4 text-lg text-muted">Builders post. Testers swipe. Matches get emails.</p>
+          <p className="mt-4 text-lg text-muted">Builders post. Testers swipe. Matches chat.</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link href="/login" className="btn-primary">
               Start swiping
@@ -34,7 +34,7 @@ export default async function Home() {
         <ol className="mt-6 grid gap-4 sm:grid-cols-3">
           <Step n="1" title="Post it" text="Your product, who it's for, what you want feedback on." />
           <Step n="2" title="Swipe it" text="Testers flip through cards. ♥ or ✕." />
-          <Step n="3" title="Match" text="Both sides get an email. Go talk." />
+          <Step n="3" title="Match" text="A chat opens. Go talk." />
         </ol>
       </section>
 
@@ -62,7 +62,7 @@ export default async function Home() {
         <h2 className="text-3xl font-black">
           Find your match<span className="text-accent">.</span>
         </h2>
-        <p className="mt-2 text-sm text-muted">Emails are only shared when you match.</p>
+        <p className="mt-2 text-sm text-muted">Your email stays private. Matches chat in the app.</p>
         <Link href="/login" className="btn-primary mt-6 px-8 py-3 text-lg">
           Get started
         </Link>

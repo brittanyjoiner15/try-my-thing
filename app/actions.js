@@ -8,15 +8,17 @@ import { createAuthClient } from "@/lib/supabase/server";
 import { DEMO } from "@/lib/demo";
 import { getUser, requireProfile, requireAdmin } from "@/lib/session";
 import * as data from "@/lib/data";
-import { introMailto, builderIntroMailto } from "@/lib/intro";
 import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TYPES } from "@/lib/product-options";
 import { ROLES, TOPICS, LOOKING_FOR, TOPICS_MAX, BUILDING_MAX } from "@/lib/profile-options";
 import { geocode } from "@/lib/geocode";
 import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
-import { sendProductMatchEmails, sendBuilderMatchEmails } from "@/lib/match-emails";
+import { sendProductMatchEmails, sendBuilderMatchEmails, sendChatAcceptedEmail, sendNewMessageEmail } from "@/lib/match-emails";
 
 // Keeps testers from right-swiping everything and flooding builders with no-shows.
 const MAX_RIGHT_SWIPES_PER_WEEK = 3;
+// Chat limits. Generous for a real conversation, low enough to stop a script.
+const MESSAGE_MAX = 2000; // also a check constraint in the chats migration
+const MAX_MESSAGES_PER_10_MIN = 30;
 
 // Base URL for links in emails. Netlify sets URL to the site's main address.
 async function appUrl() {
@@ -190,8 +192,8 @@ export async function toggleMyProduct(productId, hidden) {
   revalidatePath("/products");
 }
 
-// Returns { error } or { ok, match }. On a right swipe, match holds the builder's contact details
-// so the tester can reach out, and both sides get an email (sent after the response).
+// Returns { error } or { ok, match }. A right swipe opens a pending chat that the builder has to
+// accept, and both sides get an email (sent after the response).
 export async function swipe(productId, direction) {
   const { user, profile } = await requireProfile();
   if (!["left", "right"].includes(direction)) return { error: "Bad swipe." };
@@ -217,17 +219,11 @@ export async function swipe(productId, direction) {
   revalidatePath("/matches");
   if (direction === "left") return { ok: true };
 
-  const url = await appUrl();
-  after(() => sendProductMatchEmails({ product, builder: product.owner, tester: profile, appUrl: url }));
-  return {
-    ok: true,
-    match: {
-      product: product.name,
-      builderName: product.owner.name,
-      builderEmail: product.owner.email,
-      mailto: introMailto({ product, builder: product.owner, tester: profile }),
-    },
-  };
+  // The chat starts pending: the tester can't message until the builder accepts.
+  const chat = await data.createChat({ user_a: user.id, user_b: product.owner_id, product_id: productId, status: "pending" });
+  const chatUrl = `${await appUrl()}/matches/${chat.id}`;
+  after(() => sendProductMatchEmails({ product, builder: product.owner, tester: profile, chatUrl }));
+  return { ok: true, match: { product: product.name, builderName: product.owner.name, chatId: chat.id } };
 }
 
 // One-click opt-in from the Builders tab, for people who filled in builder fields but missed the checkbox.
@@ -238,7 +234,7 @@ export async function enableBuilderMatching() {
 }
 
 // Builder ↔ builder swipe. Returns { error } or { ok, match }. It's only a match when the other
-// builder already swiped right on you, and only then do contact details come back.
+// builder already swiped right on you, and only then does a chat open.
 export async function swipeBuilder(builderId, direction) {
   const { user, profile } = await requireProfile();
   if (!["left", "right"].includes(direction)) return { error: "Bad swipe." };
@@ -251,23 +247,106 @@ export async function swipeBuilder(builderId, direction) {
   if (duplicate) return { error: "You already swiped on this builder." };
   if (direction === "left" || !(await data.hasRightLike(builderId, user.id))) return { ok: true };
 
+  // user_a is the lower id, so both people's swipes find the same chat.
+  const [user_a, user_b] = [user.id, builderId].sort();
+  const chat = await data.createChat({ user_a, user_b, status: "open" });
   revalidatePath("/matches");
-  const url = await appUrl();
-  after(() => sendBuilderMatchEmails({ a: profile, b: other, appUrl: url }));
-  return {
-    ok: true,
-    match: {
-      name: other.name,
-      email: other.email,
-      github_url: other.github_url,
-      linkedin_url: other.linkedin_url,
-      mailto: builderIntroMailto({ me: profile, them: other }),
-    },
-  };
+  const chatUrl = `${await appUrl()}/matches/${chat.id}`;
+  after(() => sendBuilderMatchEmails({ a: profile, b: other, chatUrl }));
+  return { ok: true, match: { name: other.name, chatId: chat.id } };
 }
 
 export async function setProductHidden(productId, hidden) {
   await requireAdmin();
   await data.setProductHidden(productId, hidden);
   revalidatePath("/admin");
+}
+
+// --- Chat ---
+
+const hoursSince = (iso) => Math.round(((Date.now() - new Date(iso)) / 36e5) * 10) / 10; // one decimal
+
+// The builder accepts (opens the chat) or declines a tester's request.
+export async function respondToTester(chatId, accept) {
+  const { user, profile } = await requireProfile();
+  const chat = await data.getChat(chatId, user.id);
+  if (!chat?.product || chat.product.owner_id !== user.id || chat.status !== "pending") return { error: "That request isn't waiting on you." };
+
+  await data.setChatStatus(chatId, accept ? "open" : "declined");
+  const hoursWaiting = hoursSince(chat.created_at);
+  logPostHogAction("tester request answered", {
+    event: "tester_request_answered",
+    accepted: accept,
+    chat_id: chatId,
+    product_id: chat.product.id,
+    hours_waiting: hoursWaiting,
+  });
+  await flushPostHogLogs();
+  if (accept) {
+    const [tester, chatUrl] = [await data.getProfile(chat.user_a), `${await appUrl()}/matches/${chatId}`];
+    after(() => sendChatAcceptedEmail({ product: chat.product, builder: profile, tester, chatUrl }));
+  }
+  revalidatePath("/matches");
+  revalidatePath(`/matches/${chatId}`);
+  return { ok: true, stats: { product_id: chat.product.id, hours_waiting: hoursWaiting } };
+}
+
+// What every message analytics event carries, so PostHog can answer: how many matches start a chat,
+// how many get a reply, who goes first, and how long after matching. Read before the insert updates the chat.
+function messageStats(chat, userId) {
+  return {
+    chat_id: chat.id,
+    chat_type: chat.product ? "product" : "builder",
+    sender_side: !chat.product ? "builder_match" : chat.product.owner_id === userId ? "builder" : "tester",
+    is_first_message: !chat.last_message_at, // this message starts the conversation
+    is_reply: Boolean(chat.last_sender_id) && chat.last_sender_id !== userId, // answering the other person
+    hours_since_match: hoursSince(chat.created_at),
+  };
+}
+
+// Returns { error } or { message, stats }. Emails the other person only if this is the first message
+// since they last opened the chat, so a burst of messages sends one email.
+export async function sendMessage(chatId, text) {
+  const { user, profile } = await requireProfile();
+  const body = String(text ?? "").trim();
+  if (!body) return { error: "Write something first." };
+  if (body.length > MESSAGE_MAX) return { error: `Messages max out at ${MESSAGE_MAX} characters.` };
+
+  const chat = await data.getChat(chatId, user.id);
+  if (!chat) return { error: "That chat doesn't exist." };
+  if (chat.status !== "open") return { error: chat.status === "pending" ? "The builder hasn't accepted yet." : "This chat is closed." };
+
+  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  if ((await data.countRecentMessages(user.id, tenMinAgo)) >= MAX_MESSAGES_PER_10_MIN) {
+    // Our own limit, not an outage. Logged so we can see if it's set too low for real conversations.
+    logPostHogAction("message rate limited", { event: "message_rate_limited", chat_id: chatId, limit: MAX_MESSAGES_PER_10_MIN });
+    await flushPostHogLogs();
+    return { error: "You're sending a lot of messages. Take a breather and try again in a few minutes." };
+  }
+
+  const stats = { ...messageStats(chat, user.id), message_length: body.length };
+  const message = await data.insertMessage({ chat_id: chatId, sender_id: user.id, body });
+  await data.touchChat(chatId, chat.me, "read"); // sending counts as reading
+
+  const them = chat.me === "a" ? "b" : "a";
+  const [readAt, notifiedAt] = [chat[`${them}_read_at`], chat[`${them}_notified_at`]];
+  if (!notifiedAt || (readAt && readAt > notifiedAt)) {
+    await data.touchChat(chatId, them, "notified");
+    const [to, chatUrl] = [await data.getProfile(chat.them.id), `${await appUrl()}/matches/${chatId}`];
+    after(() => sendNewMessageEmail({ to, from: profile, body, chatUrl }));
+  }
+
+  logPostHogAction("message sent", { event: "message_sent", ...stats });
+  await flushPostHogLogs();
+  return { message, stats };
+}
+
+// Called every few seconds by the open chat page. Returns messages newer than sinceIso and marks the chat read.
+export async function pollChat(chatId, sinceIso) {
+  const { user } = await requireProfile();
+  const chat = await data.getChat(chatId, user.id);
+  if (!chat) return { error: "That chat doesn't exist." };
+  const messages = await data.getMessages(chatId, sinceIso);
+  if (messages.some((m) => m.sender_id !== user.id)) await data.touchChat(chatId, chat.me, "read");
+  return { messages, status: chat.status };
 }

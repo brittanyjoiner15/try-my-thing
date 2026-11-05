@@ -28,7 +28,7 @@ function Icon({ name }) {
 
 const tab = "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-semibold";
 
-export default function BottomNav({ showAdmin, userId, userEmail }) {
+export default function BottomNav({ showAdmin, userId, userEmail, unread = 0 }) {
   const pathname = usePathname();
   const previousUserId = useRef(null);
 
@@ -53,7 +53,7 @@ export default function BottomNav({ showAdmin, userId, userEmail }) {
   }, []);
   const tabs = [
     { href: "/swipe", label: "Swipe", icon: "swipe" },
-    { href: "/matches", label: "Matches", icon: "matches" },
+    { href: "/matches", label: "Matches", icon: "matches", badge: unread },
     { href: "/products", label: "My products", icon: "products" },
     { href: "/profile", label: "Profile", icon: "profile" },
     ...(showAdmin ? [{ href: "/admin", label: "Admin", icon: "admin" }] : []),
@@ -65,8 +65,13 @@ export default function BottomNav({ showAdmin, userId, userEmail }) {
         {tabs.map((t) => {
           const active = pathname.startsWith(t.href);
           return (
-            <Link key={t.href} href={t.href} className={`${tab} ${active ? "text-accent" : "text-muted hover:text-foreground"}`}>
+            <Link key={t.href} href={t.href} className={`${tab} relative ${active ? "text-accent" : "text-muted hover:text-foreground"}`}>
               <Icon name={t.icon} />
+              {t.badge > 0 && (
+                <span className="absolute top-1 left-1/2 ml-2 min-w-4 rounded-full bg-accent px-1 text-[10px] leading-4 text-white">
+                  {t.badge > 9 ? "9+" : t.badge}
+                </span>
+              )}
               {t.label}
             </Link>
           );
