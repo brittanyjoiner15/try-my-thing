@@ -8,21 +8,12 @@ import "./globals.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
 export const metadata = {
-  // Makes the link preview image URL absolute. Netlify sets URL to the site's main address at build time.
-  metadataBase: new URL(process.env.URL ?? "http://localhost:3000"),
   title: "Try my thing",
   description: "Builders find real testers. Testers find new tools first. From the PostHog community.",
 };
 
-// viewportFit lets the tab bar sit above the iPhone home indicator (see safe-area padding in BottomNav).
-// themeColor tints the browser bar to match the page background.
-export const viewport = {
-  viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f5ef" },
-    { media: "(prefers-color-scheme: dark)", color: "#15161a" },
-  ],
-};
+// Lets the tab bar sit above the iPhone home indicator (see safe-area padding in BottomNav).
+export const viewport = { viewportFit: "cover" };
 
 export default async function RootLayout({ children }) {
   const user = await getUser();
