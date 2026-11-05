@@ -20,7 +20,7 @@ if (missingVariable && process.env.NODE_ENV === "development") {
 export const loggerProvider = token && host
   ? new LoggerProvider({
       resource: resourceFromAttributes({
-        "service.name": "builder-matchmaker",
+        "service.name": "try-my-thing",
         "deployment.environment": process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
       }),
       processors: [
