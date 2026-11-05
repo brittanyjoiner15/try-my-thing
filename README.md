@@ -1,6 +1,6 @@
 # try my thing
 
-Tinder for trying software, from the PostHog community. Builders post what they're making, testers swipe through it, and a right swipe shows the tester the builder's email (with a pre-written intro), and shows the builder the tester's email on their Matches page. The app sends no emails.
+Tinder for trying software, from the PostHog community. Builders post what they're making, testers swipe through it, and a right swipe shows the tester the builder's email (with a pre-written intro), and shows the builder the tester's email on their Matches page. Both sides also get an email when they match (`lib/match-emails.js`).
 
 **Stack:** Next.js 16 · Supabase (magic-link login + Postgres) · Vercel · PostHog (analytics)
 
@@ -11,7 +11,7 @@ Tinder for trying software, from the PostHog community. Builders post what they'
 - `/products/[id]`: the product's Hinge-style profile (logo, phone screenshot, platforms, up to 3 prompt answers). The swipe card shows the same thing. `/products/[id]/edit` lets the owner change it. Prompt and platform lists live in `lib/product-options.js`.
 - `/swipe`: testers swipe. A Products / Builders toggle at the top switches decks (see below). A right swipe saves the match and shows the builder's email plus a pre-written intro email. Products drop out of the deck once they hit their tester limit. Each tester gets max 3 right swipes per week.
 - `/matches`: builders see who wants to try their stuff; testers see what they matched with. Both with emails.
-- `/swipe?mode=builders`: builders who opted in swipe on each other. Ranked by distance, shared problem spaces, shared stack, and what they're looking for (`lib/builder-match.js`). Mutual right swipe = match, and only then are emails and GitHub/LinkedIn links shared. No weekly limit.
+- `/swipe?mode=builders`: builders who opted in swipe on each other. Ranked by distance, shared problem spaces, shared stack, and what they're looking for (`lib/builder-match.js`). Mutual right swipe = match, and only then are emails and GitHub/LinkedIn links shared. Both builders get an email. No weekly limit.
 - `/profile`: edit your profile, including the builder fields and the "Show me to other builders" opt-in. City is geocoded with OpenStreetMap Nominatim (`lib/geocode.js`) and stored rounded to ~10 km. Sign out lives here.
 - `/admin`: all matches, and hide/unhide products. Only emails in `ADMIN_EMAILS` can open it.
 

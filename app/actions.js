@@ -1,6 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAuthClient } from "@/lib/supabase/server";
@@ -12,9 +13,15 @@ import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TY
 import { ROLES, TOPICS, LOOKING_FOR, TOPICS_MAX, BUILDING_MAX } from "@/lib/profile-options";
 import { geocode } from "@/lib/geocode";
 import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
+import { sendProductMatchEmails, sendBuilderMatchEmails } from "@/lib/match-emails";
 
 // Keeps testers from right-swiping everything and flooding builders with no-shows.
 const MAX_RIGHT_SWIPES_PER_WEEK = 3;
+
+// Base URL for links in emails. Netlify sets URL to the site's main address.
+async function appUrl() {
+  return (await headers()).get("origin") ?? process.env.URL ?? "http://localhost:3000";
+}
 
 const field = (formData, name) => String(formData.get(name) ?? "").trim();
 
@@ -184,7 +191,7 @@ export async function toggleMyProduct(productId, hidden) {
 }
 
 // Returns { error } or { ok, match }. On a right swipe, match holds the builder's contact details
-// so the tester can reach out. No email is sent by the app.
+// so the tester can reach out, and both sides get an email (sent after the response).
 export async function swipe(productId, direction) {
   const { user, profile } = await requireProfile();
   if (!["left", "right"].includes(direction)) return { error: "Bad swipe." };
@@ -209,6 +216,9 @@ export async function swipe(productId, direction) {
   await flushPostHogLogs();
   revalidatePath("/matches");
   if (direction === "left") return { ok: true };
+
+  const url = await appUrl();
+  after(() => sendProductMatchEmails({ product, builder: product.owner, tester: profile, appUrl: url }));
   return {
     ok: true,
     match: {
@@ -242,6 +252,8 @@ export async function swipeBuilder(builderId, direction) {
   if (direction === "left" || !(await data.hasRightLike(builderId, user.id))) return { ok: true };
 
   revalidatePath("/matches");
+  const url = await appUrl();
+  after(() => sendBuilderMatchEmails({ a: profile, b: other, appUrl: url }));
   return {
     ok: true,
     match: {
