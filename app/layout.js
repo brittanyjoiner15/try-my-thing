@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import { getUser, isAdmin } from "@/lib/session";
 import BottomNav from "@/app/components/BottomNav";
 import { DEMO } from "@/lib/demo";
+import { countUnreadChats } from "@/lib/data";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -26,6 +27,8 @@ export const viewport = {
 
 export default async function RootLayout({ children }) {
   const user = await getUser();
+  // Tab bar badge. Updates on page loads and server actions, not live. TODO: poll it if people miss messages.
+  const unread = user ? await countUnreadChats(user.id) : 0;
 
   return (
     <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
@@ -43,7 +46,7 @@ export default async function RootLayout({ children }) {
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16">{children}</main>
         {/* Bottom padding keeps the footer clear of the fixed tab bar. */}
         <footer className={`py-6 text-center text-xs text-muted ${user ? "pb-24" : ""}`}>from the PostHog community</footer>
-        {user && <BottomNav showAdmin={isAdmin(user)} userId={user.id} userEmail={user.email} />}
+        {user && <BottomNav showAdmin={isAdmin(user)} userId={user.id} userEmail={user.email} unread={unread} />}
       </body>
     </html>
   );

@@ -24,7 +24,7 @@ const KINDS = {
     Footer: ProductFooter,
     Match: MatchScreen,
     Empty: ProductsEmpty,
-    help: (card) => `Try it = you get ${card.builder}'s email to set it up.`,
+    help: (card) => `Try it = ${card.builder} gets a request. If they accept, you chat.`,
   },
   builders: {
     action: swipeBuilder,
@@ -37,7 +37,7 @@ const KINDS = {
     Footer: BuilderFooter,
     Match: BuilderMatchScreen,
     Empty: BuildersEmpty,
-    help: (card) => `If ${card.name} swipes right on you too, you'll both get each other's email.`,
+    help: (card) => `If ${card.name} swipes right on you too, a chat opens.`,
   },
 };
 
@@ -47,7 +47,7 @@ export default function SwipeDeck({ kind, initialCards }) {
   const [dx, setDx] = useState(0);
   const [flying, setFlying] = useState(null); // "left" | "right" while the card animates out
   const [message, setMessage] = useState(null);
-  const [match, setMatch] = useState(null); // builder contact details after a right swipe
+  const [match, setMatch] = useState(null); // shown after a right swipe that made a match
   const [, startTransition] = useTransition();
   const dragStart = useRef(null);
   const [dragging, setDragging] = useState(false);
@@ -267,35 +267,18 @@ function Message({ type, text }) {
 }
 
 function MatchScreen({ match, onDone }) {
-  const [copied, setCopied] = useState(false);
   const first = match.builderName.split(" ")[0];
 
   return (
     <div className="panel mx-auto mt-8 max-w-md text-center">
-      <h1 className="text-3xl font-bold">It&apos;s a match</h1>
+      <h1 className="text-3xl font-bold">Request sent</h1>
       <p className="mt-2 text-muted">
-        {first} wants testers for {match.product}. Email them to get access. They&apos;ll see you on their matches page too.
+        {first} wants testers for {match.product}. When they accept, a chat opens and we&apos;ll email you.
       </p>
-
-      <p className="ph-no-capture mt-6 rounded-lg border border-border px-4 py-3 font-mono text-sm">{match.builderEmail}</p>
-
       <div className="mt-4 flex flex-col gap-2">
-        <a
-          href={match.mailto}
-          className="btn-primary"
-          onClick={() => posthog.capture("match_outreach_started", { match_type: "product" })}
-        >
-          Email {first} (pre-written)
-        </a>
-        <button
-          className="btn-ghost"
-          onClick={() => {
-            navigator.clipboard.writeText(match.builderEmail);
-            setCopied(true);
-          }}
-        >
-          {copied ? "Copied" : "Copy email"}
-        </button>
+        <Link href="/matches" className="btn-ghost">
+          See my matches
+        </Link>
         <button className="mt-2 text-sm text-muted underline" onClick={onDone}>
           Keep swiping
         </button>
@@ -397,41 +380,20 @@ function BuildersEmpty() {
 }
 
 function BuilderMatchScreen({ match, onDone }) {
-  const [copied, setCopied] = useState(false);
   const first = match.name.split(" ")[0];
 
   return (
     <div className="panel mx-auto mt-8 max-w-md text-center">
       <h1 className="text-3xl font-bold">You and {first} matched</h1>
-      <p className="mt-2 text-muted">You both swiped right. Say hi. They&apos;ll see you on their matches page too.</p>
-
-      <p className="ph-no-capture mt-6 rounded-lg border border-border px-4 py-3 font-mono text-sm">{match.email}</p>
-      <div className="mt-2 flex justify-center gap-4 text-sm">
-        {match.github_url && (
-          <a href={match.github_url} target="_blank" rel="noreferrer" className="text-accent underline">GitHub ↗</a>
-        )}
-        {match.linkedin_url && (
-          <a href={match.linkedin_url} target="_blank" rel="noreferrer" className="text-accent underline">LinkedIn ↗</a>
-        )}
-      </div>
-
+      <p className="mt-2 text-muted">You both swiped right. Your chat is open, and we wrote a first message for you.</p>
       <div className="mt-4 flex flex-col gap-2">
-        <a
-          href={match.mailto}
+        <Link
+          href={`/matches/${match.chatId}`}
           className="btn-primary"
           onClick={() => posthog.capture("match_outreach_started", { match_type: "builder" })}
         >
-          Email {first} (pre-written)
-        </a>
-        <button
-          className="btn-ghost"
-          onClick={() => {
-            navigator.clipboard.writeText(match.email);
-            setCopied(true);
-          }}
-        >
-          {copied ? "Copied" : "Copy email"}
-        </button>
+          Message {first}
+        </Link>
         <button className="mt-2 text-sm text-muted underline" onClick={onDone}>
           Keep swiping
         </button>

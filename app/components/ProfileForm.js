@@ -62,7 +62,7 @@ export default function ProfileForm({ profile, title, intro, submitLabel }) {
         <label className="flex items-start gap-3">
           <input type="checkbox" name="open_to_builders" className="mt-1" defaultChecked={profile?.open_to_builders} />
           <span>
-            Show me to other builders. You match when you both swipe right, and only then do you see each other&apos;s email.
+            Show me to other builders. You match when you both swipe right, and only then can you chat.
           </span>
         </label>
 
@@ -93,9 +93,9 @@ export default function ProfileForm({ profile, title, intro, submitLabel }) {
         <p className="hint mt-0">Links are only shared after a match.</p>
       </fieldset>
 
-      {/* Sharing on match is the whole service, so this is a notice, not a checkbox. consent_at records the first save. */}
+      {/* Sharing a profile on match is the whole service, so this is a notice, not a checkbox. consent_at records the first save. */}
       <p className="text-sm text-muted">
-        When you match, that person sees your name, email, and profile. Builders also see your links after a mutual match.
+        When you match, that person sees your name and profile, and you chat in the app. Your email stays private. Builders also see your links after a mutual match.
       </p>
 
       <button className="btn-primary w-full">{submitLabel}</button>
