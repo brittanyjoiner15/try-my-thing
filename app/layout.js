@@ -34,7 +34,7 @@ export default async function RootLayout({ children }) {
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16">{children}</main>
         {/* Bottom padding keeps the footer clear of the fixed tab bar. */}
         <footer className={`py-6 text-center text-xs text-muted ${user ? "pb-24" : ""}`}>from the PostHog community</footer>
-        {user && <BottomNav showAdmin={isAdmin(user)} showSignOut={!DEMO} />}
+        {user && <BottomNav showAdmin={isAdmin(user)} />}
       </body>
     </html>
   );

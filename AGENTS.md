@@ -20,14 +20,14 @@ Tinder for trying software, from the PostHog community. Read `README.md` first f
 
 ### Working on the code
 - All data access goes through `lib/data/index.js`. Every new function needs a version in both `mock.js` (demo mode) and `supabase.js`.
-- Prompt and platform lists: `lib/product-options.js`. Pre-written intro email: `lib/intro.js`.
+- Prompt and platform lists: `lib/product-options.js`. Profile lists (roles, problem spaces, looking for): `lib/profile-options.js`. Pre-written intro email: `lib/intro.js`.
 - `featured` products sort first in every deck. Set it by hand in SQL; there's no UI. The PostHog example product is featured and owned by Britt's personal account.
-- Images: public `product-images` storage bucket, uploaded only by server code with the secret key. No SVG.
+- Images: public `product-images` storage bucket, uploaded only by server code with the secret key. No SVG. Profile photos live in the same bucket under `avatars/<user id>/`.
 
 ### Database migrations
 - Migrations are applied **by hand** and aren't in Supabase's migration history. Never run `supabase db push`, because it would re-run the init migration.
 - Apply with `supabase db query --linked --project-ref kwuossjlcjpzmhmlzhuu -f <file>`. Run this from a scratch folder that holds a copy of `supabase/migrations/`: inside the repo, the CLI fails with "failed to parse environment file: .env.local".
-- Applied so far: `20261103000000_init`, `20261104000000_product_profiles`, `20261104010000_featured_products`.
+- Applied so far: `20261103000000_init`, `20261104000000_product_profiles`, `20261104010000_featured_products`, `20261105000000_builder_matching`, `20261105010000_profile_photos`.
 
 ### Testing
 - Britt usually has a dev server running against real Supabase. Don't kill it. `next dev` refuses to start a second server in the same folder.
@@ -39,5 +39,7 @@ Tinder for trying software, from the PostHog community. Read `README.md` first f
 - Branded Supabase email templates (they still use the plain defaults).
 - Builder-side pre-written email to testers on the Matches page.
 - "Remove image" button, and deleting replaced images from storage (TODO in `app/actions.js`).
-- Profile edit page (names can only be changed in SQL today).
+- Connect GitHub (Supabase identity linking) to pre-fill stack, bio and location. LinkedIn's API only returns name/email/photo, so it stays a plain URL field.
+- Builder matches aren't shown on `/admin` yet.
+- The first person to swipe right on a builder isn't told when it becomes a match. They only see it on `/matches`.
 - PostHog event for card page taps, to see whether testers flip through prompts.

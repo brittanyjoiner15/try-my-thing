@@ -9,10 +9,10 @@ export default function ImageInput({ name, label, hint, currentUrl, shape }) {
   const [preview, setPreview] = useState(currentUrl);
   const [error, setError] = useState(null);
 
-  const frame =
-    shape === "phone"
-      ? "aspect-[9/19.5] w-24 rounded-2xl border-4 border-foreground"
-      : "h-20 w-20 rounded-2xl border border-border";
+  const frame = {
+    phone: "aspect-[9/19.5] w-24 rounded-2xl border-4 border-foreground",
+    round: "h-20 w-20 rounded-full border border-border",
+  }[shape] ?? "h-20 w-20 rounded-2xl border border-border";
 
   return (
     <div>
@@ -21,13 +21,13 @@ export default function ImageInput({ name, label, hint, currentUrl, shape }) {
         <div className={`${frame} shrink-0 overflow-hidden bg-background`}>
           {preview && <img src={preview} alt="" className="h-full w-full object-cover object-top" />}
         </div>
-        <div>
+        <div className="min-w-0">
           <input
             id={name}
             name={name}
             type="file"
             accept={IMAGE_TYPES.join(",")}
-            className="text-sm"
+            className="max-w-full text-sm"
             onChange={(e) => {
               const file = e.target.files?.[0];
               setError(null);
