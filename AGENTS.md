@@ -16,7 +16,8 @@ Tinder for trying software, from the PostHog community. Read `README.md` first f
 - **Hosting:** Netlify (not Vercel, despite the README's Deploy section). Netlify caps function requests at 6MB, which is why `serverActions.bodySizeLimit` is 5MB.
 - **Domain:** `trymything.app`, registered and DNS on Cloudflare. Not wired to Netlify or set as the Supabase Site URL yet.
 - **Supabase:** project `try-my-thing`, ref `kwuossjlcjpzmhmlzhuu`.
-- **Email:** Supabase Auth sends magic links through Resend SMTP (`smtp.resend.com:465`, user `resend`). Resend is verified on the **root** domain, so the sender must be `@trymything.app` (not `@mail.trymything.app`). The app sends no other email.
+- **Email:** Supabase Auth sends magic links through Resend SMTP (`smtp.resend.com:465`, user `resend`). Resend is verified on the **root** domain, so the sender must be `@trymything.app` (not `@mail.trymything.app`).
+- **Match emails:** `lib/match-emails.js` emails both people on a match (tester and builder, or two builders), through Resend's HTTP API from `after()` so swipes don't wait on it. Needs `RESEND_API_KEY` and `MATCH_EMAIL_FROM` (an `@trymything.app` sender). Without them nothing is sent; demo mode prints the emails to the server console. Each email's Reply-To is the other person.
 - **PostHog:** US cloud. Env vars are `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST`, set in `.env.local` and Netlify (renamed from `NEXT_PUBLIC_POSTHOG_KEY` on 2026-11-04). Session replay is off for this app's project.
 
 ### Working on the code
@@ -50,7 +51,6 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 - "Remove image" button, and deleting replaced images from storage (TODO in `app/actions.js`).
 - Connect GitHub (Supabase identity linking) to pre-fill stack, bio and location. LinkedIn's API only returns name/email/photo, so it stays a plain URL field.
 - Builder matches aren't shown on `/admin` yet.
-- The first person to swipe right on a builder isn't told when it becomes a match. They only see it on `/matches`.
 - PostHog event for card page taps, to see whether testers flip through prompts.
 - PostHog follow-ups (details in `docs/posthog-wizard-review.md`): log failures in `app/actions.js` and move the log flush into `after()`; add a server-side `user_signed_in` event with `is_new_user` in `app/auth/callback/route.js`; capture server errors with `onRequestError`; add IDs to the match events; add a reverse proxy for ad blockers.
 - Terms or a privacy note saying Britt can see account emails (they're on PostHog person profiles).
