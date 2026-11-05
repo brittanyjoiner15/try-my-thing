@@ -1,8 +1,16 @@
 # PostHog wizard review
 
-What the PostHog wizard changed in this app, and what to change before committing.
+What the PostHog wizard changed in this app, what a review (Claude Code, 2026-11-04) found wrong with it, and what's been fixed since.
 
 **Verdict:** the browser analytics are mostly good. The main gaps were the env var rename, server-side logging that only records successes and slows down requests, and emails showing up in PostHog. Status for each is below.
+
+## Who did what
+
+| Who | What |
+|---|---|
+| **PostHog wizard** | Everything under "What the wizard added": browser setup, `identify`, events, `global-error.js`, OpenTelemetry server logs, and the env var rename. It added **no** session replay masking. |
+| **Review (Claude Code)** | Found that a `pnpm install` during `next dev` caused the reload loop. Found the env var rename would silently turn off analytics in production. Found that server logs only record successes and make requests wait. Found that nothing kept emails out of replays, and **added the `ph-no-capture` masking**. Wrote this doc and updated `AGENTS.md`. |
+| **Britt** | Decided to keep the dev-mode crash. Renamed the env vars on Netlify and added `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` to `SECRETS_SCAN_OMIT_KEYS`. Parked the terms/privacy note. |
 
 ---
 
@@ -55,7 +63,7 @@ What the PostHog wizard changed in this app, and what to change before committin
 In both `instrumentation-client.js` and `instrumentation.js`, the app throws if the PostHog vars aren't set. Britt is fine with this: a real app needs the keys anyway. The only cost is that demo mode no longer runs without PostHog keys.
 
 **2. Rename the env vars on Netlify.** ✅ Done (2026-11-04).
-The wizard renamed `NEXT_PUBLIC_POSTHOG_KEY` to `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`. Outside development, a missing token fails silently (no error, no analytics), so Netlify needed the new name. `NEXT_PUBLIC_POSTHOG_HOST` was already set there. We kept the new names in code because they match PostHog's current setup, so future wizard runs won't rename them again. Leftover: delete the empty `NEXT_PUBLIC_POSTHOG_KEY=` line from `.env.local`.
+The wizard renamed `NEXT_PUBLIC_POSTHOG_KEY` to `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`. Outside development, a missing token fails silently (no error, no analytics), so Netlify needed the new name. `NEXT_PUBLIC_POSTHOG_HOST` was already set there. The first deploy after the rename then failed Netlify's secret scan: the scanner flagged the PostHog token in the build output, even though the token is public by design (it ships in browser JavaScript). Fixed by adding `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` to `SECRETS_SCAN_OMIT_KEYS` in Netlify. We kept the new names in code because they match PostHog's current setup, so future wizard runs won't rename them again. Leftover: delete the empty `NEXT_PUBLIC_POSTHOG_KEY=` line from `.env.local`.
 
 **3. Server-side logging: keep it, but log the right things.** Not started.
 Logging with OpenTelemetry is a good idea. The problem is what the wizard logs and how:
@@ -68,7 +76,7 @@ Logging with OpenTelemetry is a good idea. The problem is what the wizard logs a
 
 **4. Emails in PostHog.** Partly done.
 The README promises that emails are only shown to the two people in a match and to admins.
-- **Session replay:** ✅ masked (2026-11-04). Replay is currently **off** for this app's PostHog project (events carry `$recording_status: disabled`), but it can be turned on in the PostHog UI with no code change. Every element that shows an email now has the `ph-no-capture` class, so it shows as a blank block in recordings:
+- **Session replay:** ✅ masked (2026-11-04), **added in review, not by the wizard.** The wizard set up identify and events but did nothing to keep emails out of recordings. Replay is currently **off** for this app's PostHog project (events carry `$recording_status: disabled`), but it can be turned on in the PostHog UI with no code change. Every element that shows an email now has the `ph-no-capture` class, so it shows as a blank block in recordings:
   - Match screens in `app/swipe/SwipeDeck.js` (the email box)
   - Email links on `app/matches/page.js`
   - Emails on `app/admin/page.js`
