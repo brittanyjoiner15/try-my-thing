@@ -2,10 +2,10 @@
 
 Tinder for trying software, from the PostHog community. Builders post what they're making, testers swipe through it, and a right swipe sends the builder a request. When the builder accepts, the two of them chat in the app. Emails are never shared between people; the app emails each side about matches and new messages (`lib/match-emails.js`).
 
-**Stack:** Next.js 16 · Supabase (magic-link login + Postgres) · Vercel · PostHog (analytics)
+**Stack:** Next.js 16 · Supabase (magic-link + GitHub login, Postgres) · Vercel · PostHog (analytics)
 
 ## How it works
-- `/login`: email magic link.
+- `/login`: Continue with GitHub, or an email magic link. Magic-link users can connect GitHub later from `/profile`. GitHub data (`github_profiles`, filled in `/auth/callback` by `lib/github.js`) fills empty profile fields, shows suggestions for the rest, and adds languages + top repos to builder cards (no links until a match).
 - `/onboarding`: name, role, stack, builder fields, and a notice that name and profile are shared with matches (`consent_at` records the first save).
 - `/welcome`: shown once after onboarding. Three steps on how the app works, then "Post my thing" or "Just swipe for now".
 - `/products`: builders post a product and see how many testers matched.
@@ -33,8 +33,9 @@ All data access goes through `lib/data/index.js`, which picks `mock.js` or `supa
 1. Create a Supabase project at supabase.com.
 2. In Supabase, open **SQL Editor** and run each file in `supabase/migrations/`, oldest first. The second one adds the `product-images` storage bucket.
 3. In Supabase, go to **Authentication → URL Configuration** and add `http://localhost:3000/auth/callback` to Redirect URLs.
-4. `cp .env.example .env.local` and fill it in.
-5. `pnpm install && pnpm dev`, then open http://localhost:3000.
+4. For GitHub login: create a GitHub OAuth App (callback `https://<project-ref>.supabase.co/auth/v1/callback`), paste its Client ID and secret into **Authentication → Sign In / Providers → GitHub**, and turn on **Manual linking** in **Authentication → Sign In / Providers**.
+5. `cp .env.example .env.local` and fill it in.
+6. `pnpm install && pnpm dev`, then open http://localhost:3000.
 
 ## Test it end to end (solo)
 You need two logins, one builder and one tester. Gmail `+` addresses both land in your inbox:

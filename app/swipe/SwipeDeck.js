@@ -197,6 +197,7 @@ function builderPages(card) {
     card.building && { type: "prompt", prompt: "I'm building…", answer: card.building },
     card.looking_for.length > 0 && { type: "prompt", prompt: "Looking for…", answer: card.looking_for.join(" · ") },
     card.topics.length > 0 && { type: "prompt", prompt: "Problem spaces", answer: card.topics.join(" · ") },
+    (card.languages.length > 0 || card.repos.length > 0) && { type: "github" },
   ].filter(Boolean);
 }
 
@@ -225,6 +226,33 @@ function CardPage({ card, page }) {
     return (
       <div className="flex h-full items-center justify-center bg-accent/10">
         <Avatar name={card.name} url={card.avatar_url} size="h-40 w-40 text-6xl" />
+      </div>
+    );
+  }
+  if (page.type === "github") {
+    return (
+      <div className="flex h-full flex-col justify-center gap-4 bg-background p-6">
+        <p className="text-sm font-semibold text-muted">On GitHub</p>
+        {card.languages.length > 0 && (
+          <ul className="flex flex-wrap gap-1.5">
+            {card.languages.map((lang) => (
+              <li key={lang} className="rounded-full border border-border px-2.5 py-0.5 text-sm font-semibold">
+                {lang}
+              </li>
+            ))}
+          </ul>
+        )}
+        <ul className="space-y-2">
+          {card.repos.map((repo) => (
+            <li key={repo.name} className="rounded-xl border border-border p-3">
+              <p className="flex items-baseline justify-between gap-2">
+                <span className="truncate font-bold">{repo.name}</span>
+                {repo.stars > 0 && <span className="shrink-0 text-xs text-muted">★ {repo.stars}</span>}
+              </p>
+              {repo.description && <p className="mt-0.5 line-clamp-2 text-sm text-muted">{repo.description}</p>}
+            </li>
+          ))}
+        </ul>
       </div>
     );
   }

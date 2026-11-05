@@ -1,16 +1,18 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAuthClient } from "@/lib/supabase/server";
-import { DEMO_ENV, isDemo } from "@/lib/demo";
+import { DEMO_ENV, DEMO_GITHUB, GITHUB_LINK_COOKIE, isDemo } from "@/lib/demo";
 import { getUser, requireProfile, requireAdmin } from "@/lib/session";
 import * as data from "@/lib/data";
 import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TYPES } from "@/lib/product-options";
 import { ROLES, TOPICS, LOOKING_FOR, TOPICS_MAX, BUILDING_MAX } from "@/lib/profile-options";
 import { geocode } from "@/lib/geocode";
+import { fetchGitHubProfile } from "@/lib/github";
+import { captureServerError } from "@/lib/posthog-server";
 import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
 import { sendProductMatchEmails, sendBuilderMatchEmails, sendChatAcceptedEmail, sendNewMessageEmail } from "@/lib/match-emails";
 
@@ -52,6 +54,75 @@ export async function sendMagicLink(_prevState, formData) {
   return { sent: email };
 }
 
+// "Continue with GitHub" on /login. New and returning users both come back through /auth/callback.
+export async function signInWithGitHub() {
+  if (await isDemo()) redirect("/swipe");
+  const origin = (await headers()).get("origin");
+  const supabase = await createAuthClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "github",
+    options: { redirectTo: `${origin}/auth/callback` },
+  });
+  if (error) redirect("/login?error=github");
+  redirect(data.url);
+}
+
+// "Connect GitHub" on /profile, for people who signed up with a magic link. Adds GitHub as a second
+// way to sign in to the same account (needs "Manual linking" on in Supabase Auth settings).
+export async function connectGitHub() {
+  const user = await getUser(); // not requireProfile: onboarding offers this before the first save
+  if (!user) redirect("/login");
+  if (await isDemo()) {
+    await data.saveGitHubProfile({ id: user.id, ...DEMO_GITHUB, fetched_at: new Date().toISOString() });
+    redirect("/profile?github=connected");
+  }
+
+  const origin = (await headers()).get("origin");
+  const supabase = await createAuthClient();
+  const { data: link, error } = await supabase.auth.linkIdentity({
+    provider: "github",
+    options: { redirectTo: `${origin}/auth/callback` },
+  });
+  if (error) redirect("/profile?github=error");
+  (await cookies()).set(GITHUB_LINK_COOKIE, "1", { httpOnly: true, sameSite: "lax", secure: origin?.startsWith("https"), maxAge: 600 });
+  redirect(link.url);
+}
+
+// "Refresh from GitHub" on /profile: re-reads their public profile and repos by username, no sign-in needed.
+export async function refreshGitHub() {
+  const { user } = await requireProfile();
+  const current = await data.getGitHubProfile(user.id);
+  if (!current) redirect("/profile");
+  if (await isDemo()) redirect("/profile?github=refreshed"); // demo GitHub data never changes
+  try {
+    await data.saveGitHubProfile({ id: user.id, ...(await fetchGitHubProfile(null, current.username)) });
+  } catch (e) {
+    await captureServerError(e, { area: "github_refresh", limit: e.code === "github_403" ? "github" : undefined });
+    redirect("/profile?github=error");
+  }
+  revalidatePath("/profile");
+  redirect("/profile?github=refreshed");
+}
+
+// Removes GitHub data from the profile and, when they have another way to sign in, unlinks GitHub too.
+// People who only sign in with GitHub keep the link (Supabase won't remove someone's last sign-in method),
+// so their data comes back on next sign-in. They can still pick no repos to keep them off their card.
+export async function disconnectGitHub() {
+  const { user } = await requireProfile();
+  if (!(await isDemo())) {
+    const supabase = await createAuthClient();
+    const { data: ids } = await supabase.auth.getUserIdentities();
+    const github = ids?.identities?.find((i) => i.provider === "github");
+    if (github && ids.identities.length > 1) {
+      const { error } = await supabase.auth.unlinkIdentity(github);
+      if (error) redirect("/profile?github=error");
+    }
+  }
+  await data.deleteGitHubProfile(user.id);
+  revalidatePath("/profile");
+  redirect("/profile");
+}
+
 export async function signOut() {
   if (!DEMO_ENV) {
     const supabase = await createAuthClient();
@@ -76,7 +147,7 @@ export async function saveProfile(formData) {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const existing = await data.getProfile(user.id);
+  const [existing, github] = await Promise.all([data.getProfile(user.id), data.getGitHubProfile(user.id)]);
   const locationInput = field(formData, "location");
   // Only geocode when the location changed, so re-saving the profile doesn't hit the API.
   let place = { location: null, lat: null, lng: null };
@@ -89,6 +160,7 @@ export async function saveProfile(formData) {
   const role = field(formData, "role");
   // Same public bucket as product images, under avatars/ so the two never collide.
   const avatarUrl = await uploadPicked(formData, "avatar", `avatars/${user.id}`);
+  const githubAvatar = formData.get("use_github_avatar") ? github?.avatar_url : null;
   const profileRole = ROLES.includes(role) ? role : "other";
   await data.saveProfile({
     id: user.id,
@@ -97,7 +169,7 @@ export async function saveProfile(formData) {
     role: profileRole,
     stack: field(formData, "stack"),
     interests: field(formData, "interests") || null,
-    discord_handle: field(formData, "discord_handle") || null,
+    discord_handle: existing?.discord_handle ?? null, // no longer on the form, kept for people who set one
     consent_at: existing?.consent_at ?? new Date().toISOString(), // when they first saw the sharing notice
     open_to_builders: Boolean(formData.get("open_to_builders")),
     building: field(formData, "building").slice(0, BUILDING_MAX) || null,
@@ -106,7 +178,11 @@ export async function saveProfile(formData) {
     ...place,
     github_url: profileUrl(field(formData, "github_url"), "github.com"),
     linkedin_url: profileUrl(field(formData, "linkedin_url"), "linkedin.com"),
-    avatar_url: avatarUrl ?? existing?.avatar_url ?? null,
+    // A new upload wins. Then their GitHub photo if they picked it, then the current photo.
+    // No photo at all: GitHub's fills the gap, same as the other prefilled fields.
+    avatar_url: avatarUrl ?? githubAvatar ?? existing?.avatar_url ?? github?.avatar_url ?? null,
+    // The repo picker only renders when GitHub is connected. Otherwise keep what they picked before.
+    featured_repos: github ? pickedRepos(formData, github) : (existing?.featured_repos ?? null),
   });
   await logAction("profile saved", {
     event: "profile_saved",
@@ -120,6 +196,13 @@ export async function saveProfile(formData) {
     redirect("/profile?saved=1");
   }
   redirect("/welcome"); // first save: show the short how-it-works screen once
+}
+
+// Only names that are really in their GitHub repo list, max 3.
+const FEATURED_REPOS_MAX = 3;
+function pickedRepos(formData, github) {
+  const names = new Set(github.repos.map((r) => r.name));
+  return formData.getAll("featured_repos").filter((n) => names.has(n)).slice(0, FEATURED_REPOS_MAX);
 }
 
 // Text fields shared by "post" and "edit". Only known platforms and prompts get through.

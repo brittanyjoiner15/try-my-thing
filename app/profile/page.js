@@ -1,17 +1,23 @@
 import { requireProfile } from "@/lib/session";
 import { signOut } from "@/app/actions";
 import { DEMO_ENV, isDemo } from "@/lib/demo";
+import { getGitHubProfile } from "@/lib/data";
 import ProfileForm from "@/app/components/ProfileForm";
+import GitHubConnect from "@/app/components/GitHubConnect";
 
 export default async function ProfilePage({ searchParams }) {
-  const { profile } = await requireProfile();
-  const { saved } = await searchParams;
+  const { user, profile } = await requireProfile();
+  const { saved, github: githubStatus } = await searchParams;
   const demo = await isDemo();
+  const github = await getGitHubProfile(user.id);
+  // Supabase won't unlink someone's only way to sign in, so GitHub-only accounts can't disconnect.
+  const canDisconnect = demo || (user.identities?.length ?? 0) > 1;
 
   return (
     <div className="space-y-4">
       {saved && <p className="mx-auto max-w-xl rounded-lg bg-green-100 px-4 py-3 text-sm text-green-800">Profile saved.</p>}
-      <ProfileForm profile={profile} title="Your profile" intro="Testers and builders see this when you match." submitLabel="Save" />
+      <GitHubConnect github={github} status={githubStatus} canDisconnect={canDisconnect} />
+      <ProfileForm profile={profile} github={github} title="Your profile" intro="Testers and builders see this when you match." submitLabel="Save" />
       {!demo && (
         <form action={signOut} data-posthog-sign-out className="mx-auto max-w-xl text-center">
           <button className="text-sm text-muted underline">Sign out</button>
