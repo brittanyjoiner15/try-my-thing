@@ -3,13 +3,43 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import posthog from "posthog-js";
-import { swipe } from "@/app/actions";
+import { swipe, swipeBuilder } from "@/app/actions";
 import { Logo } from "@/app/components/ProductProfile";
+import Avatar from "@/app/components/Avatar";
 
 const THRESHOLD = 110; // px of drag before a release counts as a swipe
 const TAP = 6; // px of movement still treated as a tap (flips the card's page)
 
-export default function SwipeDeck({ initialCards }) {
+// Per-deck differences. Everything else (drag, tap-through pages, keys) is shared.
+const KINDS = {
+  products: {
+    action: swipe,
+    event: "product swiped",
+    eventProp: "product_id",
+    yes: "♥ Try it",
+    stamp: "TRY IT",
+    pages: productPages,
+    Footer: ProductFooter,
+    Match: MatchScreen,
+    Empty: ProductsEmpty,
+    help: (card) => `Try it = you get ${card.builder}'s email to set it up.`,
+  },
+  builders: {
+    action: swipeBuilder,
+    event: "builder swiped",
+    eventProp: "builder_id",
+    yes: "♥ Connect",
+    stamp: "CONNECT",
+    pages: builderPages,
+    Footer: BuilderFooter,
+    Match: BuilderMatchScreen,
+    Empty: BuildersEmpty,
+    help: (card) => `If ${card.name} swipes right on you too, you'll both get each other's email.`,
+  },
+};
+
+export default function SwipeDeck({ kind, initialCards }) {
+  const k = KINDS[kind];
   const [cards, setCards] = useState(initialCards);
   const [dx, setDx] = useState(0);
   const [flying, setFlying] = useState(null); // "left" | "right" while the card animates out
@@ -21,16 +51,16 @@ export default function SwipeDeck({ initialCards }) {
   const [page, setPage] = useState(0); // which page of the current card is showing
 
   const card = cards[0];
-  const pages = card ? cardPages(card) : [];
+  const pages = card ? k.pages(card) : [];
 
   function decide(direction) {
     if (!card || flying) return;
     setFlying(direction);
     setMessage(null);
-    posthog.capture("product swiped", { direction, product_id: card.id });
+    posthog.capture(k.event, { direction, [k.eventProp]: card.id });
 
     startTransition(async () => {
-      const result = await swipe(card.id, direction);
+      const result = await k.action(card.id, direction);
       if (result?.error) setMessage({ type: "error", text: result.error });
       else if (result?.match) setMatch(result.match);
     });
@@ -54,17 +84,13 @@ export default function SwipeDeck({ initialCards }) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  if (match) return <MatchScreen match={match} onDone={() => setMatch(null)} />;
+  if (match) return <k.Match match={match} onDone={() => setMatch(null)} />;
 
   if (!card) {
     return (
       <div className="panel mx-auto mt-8 max-w-md text-center">
         {message && <Message {...message} />}
-        <h1 className="text-2xl font-bold">You&apos;ve seen everything</h1>
-        <p className="mt-2 text-muted">New products show up as builders post them. Building something yourself?</p>
-        <Link href="/products" className="btn-primary mt-4">
-          Post my product
-        </Link>
+        <k.Empty />
       </div>
     );
   }
@@ -112,7 +138,7 @@ export default function SwipeDeck({ initialCards }) {
           setDx(0);
         }}
       >
-        <Stamp show={offset > 40} className="left-4 border-green-600 bg-card text-green-600">TRY IT</Stamp>
+        <Stamp show={offset > 40} className="left-4 border-green-600 bg-card text-green-600">{k.stamp}</Stamp>
         <Stamp show={offset < -40} className="right-4 border-muted bg-card text-muted">SKIP</Stamp>
 
         {pages.length > 1 && (
@@ -127,31 +153,7 @@ export default function SwipeDeck({ initialCards }) {
           <CardPage card={card} page={pages[page]} />
         </div>
 
-        <footer className="space-y-2 border-t border-border p-4">
-          <div className="flex items-center gap-3">
-            <Logo product={card} size="h-10 w-10 text-lg" />
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-xl font-bold">{card.name}</h1>
-              <p className="text-xs text-muted">
-                by {card.builder} · {card.stage}
-              </p>
-            </div>
-            <a href={`/products/${card.id}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-accent underline">
-              Full profile ↗
-            </a>
-          </div>
-          <p className="text-sm">{card.tagline}</p>
-          <ul className="flex flex-wrap gap-1 text-xs">
-            {[...(card.platforms ?? []), `🎁 ${card.perk}`].map((chip) => (
-              <li key={chip} className="rounded-full border border-border px-2 py-0.5">
-                {chip}
-              </li>
-            ))}
-          </ul>
-          <p className="line-clamp-2 text-sm text-muted">
-            <span className="font-semibold">For:</span> {card.wants}
-          </p>
-        </footer>
+        <k.Footer card={card} />
       </div>
 
       <div className="mt-6 flex justify-center gap-4">
@@ -159,23 +161,33 @@ export default function SwipeDeck({ initialCards }) {
           ✕ Skip
         </button>
         <button className="btn-primary w-32" onClick={() => decide("right")}>
-          ♥ Try it
+          {k.yes}
         </button>
       </div>
       <p className="mt-3 text-center text-xs text-muted">
-        Tap the card to flip through it. Drag it, or use ← → keys, to decide. Try it = you get {card.builder}&apos;s email to set it up.
+        Tap the card to flip through it. Drag it, or use ← → keys, to decide. {k.help(card)}
       </p>
     </div>
   );
 }
 
 // Pages a tester taps through: screenshot (or big logo), then each prompt, then what feedback they want.
-function cardPages(card) {
+function productPages(card) {
   return [
     card.screenshot_url ? { type: "screenshot" } : { type: "logo" },
     ...(card.prompts ?? []).map((p) => ({ type: "prompt", ...p })),
     { type: "prompt", prompt: "I want honest feedback on…", answer: card.feedback_on },
   ];
+}
+
+// Builder card: photo, what they're building, what they're looking for, problem spaces.
+function builderPages(card) {
+  return [
+    { type: "avatar" },
+    card.building && { type: "prompt", prompt: "I'm building…", answer: card.building },
+    card.looking_for.length > 0 && { type: "prompt", prompt: "Looking for…", answer: card.looking_for.join(" · ") },
+    card.topics.length > 0 && { type: "prompt", prompt: "Problem spaces", answer: card.topics.join(" · ") },
+  ].filter(Boolean);
 }
 
 function CardPage({ card, page }) {
@@ -189,6 +201,20 @@ function CardPage({ card, page }) {
           draggable={false}
           className="aspect-[9/19.5] h-full rounded-[1.5rem] border-[5px] border-foreground object-cover object-top"
         />
+      </div>
+    );
+  }
+  if (page.type === "avatar") {
+    // A photo fills the whole page, like a dating app. No photo: big initial in a circle.
+    if (card.avatar_url) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element -- Supabase Storage URL
+        <img src={card.avatar_url} alt={card.name} draggable={false} className="h-full w-full object-cover" />
+      );
+    }
+    return (
+      <div className="flex h-full items-center justify-center bg-accent/10">
+        <Avatar name={card.name} url={card.avatar_url} size="h-40 w-40 text-6xl" />
       </div>
     );
   }
@@ -251,6 +277,129 @@ function MatchScreen({ match, onDone }) {
           className="btn-ghost"
           onClick={() => {
             navigator.clipboard.writeText(match.builderEmail);
+            setCopied(true);
+          }}
+        >
+          {copied ? "Copied" : "Copy email"}
+        </button>
+        <button className="mt-2 text-sm text-muted underline" onClick={onDone}>
+          Keep swiping
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProductFooter({ card }) {
+  return (
+    <footer className="space-y-2 border-t border-border p-4">
+      <div className="flex items-center gap-3">
+        <Logo product={card} size="h-10 w-10 text-lg" />
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-xl font-bold">{card.name}</h1>
+          <p className="text-xs text-muted">
+            by {card.builder} · {card.stage}
+          </p>
+        </div>
+        <a href={`/products/${card.id}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-accent underline">
+          Full profile ↗
+        </a>
+      </div>
+      <p className="text-sm">{card.tagline}</p>
+      <ul className="flex flex-wrap gap-1 text-xs">
+        {[...(card.platforms ?? []), `🎁 ${card.perk}`].map((chip) => (
+          <li key={chip} className="rounded-full border border-border px-2 py-0.5">
+            {chip}
+          </li>
+        ))}
+      </ul>
+      <p className="line-clamp-2 text-sm text-muted">
+        <span className="font-semibold">For:</span> {card.wants}
+      </p>
+    </footer>
+  );
+}
+
+function BuilderFooter({ card }) {
+  return (
+    <footer className="space-y-2 border-t border-border p-4">
+      <div className="flex items-center gap-3">
+        <Avatar name={card.name} url={card.avatar_url} />
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-xl font-bold">{card.name}</h1>
+          <p className="text-xs text-muted">
+            {card.role}
+            {card.location && ` · ${card.location}`}
+            {card.distance && ` · ${card.distance}`}
+          </p>
+        </div>
+      </div>
+      <ul className="flex flex-wrap gap-1 text-xs">
+        {card.stack.slice(0, 6).map((tool) => (
+          <li
+            key={tool}
+            className={`rounded-full border px-2 py-0.5 ${card.sharedStack.includes(tool) ? "border-accent text-accent" : "border-border"}`}
+          >
+            {tool}
+          </li>
+        ))}
+      </ul>
+      {card.building && <p className="line-clamp-2 text-sm text-muted">{card.building}</p>}
+    </footer>
+  );
+}
+
+function ProductsEmpty() {
+  return (
+    <>
+      <h1 className="text-2xl font-bold">You&apos;ve seen everything</h1>
+      <p className="mt-2 text-muted">New products show up as builders post them. Building something yourself?</p>
+      <Link href="/products" className="btn-primary mt-4">
+        Post my product
+      </Link>
+    </>
+  );
+}
+
+function BuildersEmpty() {
+  return (
+    <>
+      <h1 className="text-2xl font-bold">You&apos;ve met everyone</h1>
+      <p className="mt-2 text-muted">New builders show up as they join. Check your matches in the meantime.</p>
+      <Link href="/matches" className="btn-primary mt-4">
+        See my matches
+      </Link>
+    </>
+  );
+}
+
+function BuilderMatchScreen({ match, onDone }) {
+  const [copied, setCopied] = useState(false);
+  const first = match.name.split(" ")[0];
+
+  return (
+    <div className="panel mx-auto mt-8 max-w-md text-center">
+      <h1 className="text-3xl font-bold">You and {first} matched</h1>
+      <p className="mt-2 text-muted">You both swiped right. Say hi. They&apos;ll see you on their matches page too.</p>
+
+      <p className="mt-6 rounded-lg border border-border px-4 py-3 font-mono text-sm">{match.email}</p>
+      <div className="mt-2 flex justify-center gap-4 text-sm">
+        {match.github_url && (
+          <a href={match.github_url} target="_blank" rel="noreferrer" className="text-accent underline">GitHub ↗</a>
+        )}
+        {match.linkedin_url && (
+          <a href={match.linkedin_url} target="_blank" rel="noreferrer" className="text-accent underline">LinkedIn ↗</a>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2">
+        <a href={match.mailto} className="btn-primary">
+          Email {first} (pre-written)
+        </a>
+        <button
+          className="btn-ghost"
+          onClick={() => {
+            navigator.clipboard.writeText(match.email);
             setCopied(true);
           }}
         >
