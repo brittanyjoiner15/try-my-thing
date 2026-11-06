@@ -17,7 +17,7 @@ export default function ProductForm({ action, product, title, intro, submitLabel
         <p className="mt-1 text-muted">{intro}</p>
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor="name">Product name</label>
           <input id="name" name="name" required className="input" defaultValue={product?.name} />
@@ -33,7 +33,7 @@ export default function ProductForm({ action, product, title, intro, submitLabel
         <input id="tagline" name="tagline" required maxLength={120} className="input" defaultValue={product?.tagline} />
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <ImageInput name="logo" label="Logo" hint="Square works best. PNG, JPG or WebP, under 2MB." currentUrl={product?.logo_url} />
         <ImageInput
           name="screenshot"
@@ -105,7 +105,7 @@ export default function ProductForm({ action, product, title, intro, submitLabel
         <input id="feedback_on" name="feedback_on" required className="input" placeholder="first-time setup" defaultValue={product?.feedback_on} />
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <div>
           <label className="label" htmlFor="stage">Stage</label>
           <select id="stage" name="stage" className="input" defaultValue={product?.stage}>

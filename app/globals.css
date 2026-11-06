@@ -34,6 +34,11 @@ body {
   color: var(--foreground);
 }
 
+/* Fieldsets default to min-width: min-content, so one long chip, repo name or link widens the whole form past a phone screen. */
+fieldset {
+  min-width: 0;
+}
+
 /* Small shared building blocks so pages stay readable. */
 @utility btn {
   @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition active:scale-95 disabled:opacity-50;

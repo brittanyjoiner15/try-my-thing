@@ -100,7 +100,7 @@ export default function ProfileForm({ profile, github, title, intro, submitLabel
           <p className="hint">Used to find builders near you. Only your city is shown, and we never store your exact location.</p>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="github_url">GitHub (optional)</label>
             <input id="github_url" name="github_url" className="input" placeholder="github.com/you" defaultValue={initial("github_url")} />
@@ -169,7 +169,7 @@ function Suggest({ field, value, label = "GitHub", append = false }) {
   return (
     <p className="hint flex flex-wrap items-baseline gap-x-2">
       <span className="min-w-0">
-        {label}: <span className="text-foreground">{value}</span>
+        {label}: <span className="text-foreground wrap-anywhere">{value}</span>
       </span>
       <button
         type="button"
