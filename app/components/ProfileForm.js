@@ -219,7 +219,7 @@ function RepoPicker({ repos, picked }) {
               />
               <span className="min-w-0 flex-1">
                 <span className="flex items-baseline justify-between gap-2">
-                  <span className="truncate font-semibold">{r.name}</span>
+                  <span className="min-w-0 font-semibold wrap-anywhere">{r.name}</span>
                   <span className="shrink-0 text-xs text-muted">
                     {[r.language, r.stars > 0 && `★ ${r.stars}`].filter(Boolean).join(" · ")}
                   </span>
