@@ -32,8 +32,9 @@ export default function GitHubConnect({ github, status, canDisconnect }) {
   return (
     <div className="panel mx-auto max-w-xl space-y-1">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="min-w-0 flex-1 font-bold">GitHub connected: @{github.username}</p>
-        <div className="flex gap-4">
+        {/* basis-48 drops the links onto their own line on phones instead of squeezing the name. */}
+        <p className="min-w-0 flex-1 basis-48 font-bold wrap-anywhere">GitHub connected: @{github.username}</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
           <form action={refreshGitHub} onSubmit={() => posthog.capture("github_refreshed")}>
             <Submit className="text-sm font-semibold text-accent underline disabled:no-underline disabled:opacity-60" pending="Refreshing from GitHub…">
               Refresh from GitHub

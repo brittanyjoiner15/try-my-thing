@@ -21,13 +21,13 @@ export default function ImageInput({ name, label, hint, currentUrl, shape }) {
         <div className={`${frame} shrink-0 overflow-hidden bg-background`}>
           {preview && <img src={preview} alt="" className="h-full w-full object-cover object-top" />}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <input
             id={name}
             name={name}
             type="file"
             accept={IMAGE_TYPES.join(",")}
-            className="max-w-full text-sm"
+            className="w-full text-sm"
             onChange={(e) => {
               const file = e.target.files?.[0];
               setError(null);
