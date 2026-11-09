@@ -14,7 +14,8 @@ import { geocode } from "@/lib/geocode";
 import { fetchGitHubProfile } from "@/lib/github";
 import { captureServerError } from "@/lib/posthog-server";
 import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
-import { sendProductMatchEmails, sendBuilderMatchEmails, sendChatAcceptedEmail, sendNewMessageEmail } from "@/lib/match-emails";
+import { sendProductMatchEmails, sendBuilderMatchEmails, sendChatAcceptedEmail, sendNewMessageEmail, sendInPersonConnectEmail } from "@/lib/match-emails";
+import { CONNECT_COOKIE, CONNECT_CODE, newConnectCode } from "@/lib/connect";
 
 // Keeps testers from right-swiping everything and flooding builders with no-shows.
 const MAX_RIGHT_SWIPES_PER_WEEK = 3;
@@ -195,6 +196,10 @@ export async function saveProfile(formData) {
     revalidatePath("/profile");
     redirect("/profile?saved=1");
   }
+  // Signed up from someone's in-person link: take them back to it. They skip /welcome, which is fine
+  // since they're about to land in a chat.
+  const connectCode = (await cookies()).get(CONNECT_COOKIE)?.value;
+  if (connectCode && CONNECT_CODE.test(connectCode)) redirect(`/c/${connectCode}`);
   redirect("/welcome"); // first save: show the short how-it-works screen once
 }
 
@@ -348,6 +353,51 @@ export async function swipeBuilder(builderId, direction) {
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
   await emailAfterResponse(() => sendBuilderMatchEmails({ a: profile, b: other, chatUrl }));
   return { ok: true, match: { name: other.name, chatId: chat.id } };
+}
+
+// --- In-person connect (/c/<code>, see lib/connect.js) ---
+
+// Not signed up yet: remember the link for a day, then send them through login and onboarding.
+// /auth/callback and saveProfile send them back to /c/<code> afterwards.
+export async function startConnect(code) {
+  if (!CONNECT_CODE.test(code)) redirect("/login");
+  (await cookies()).set(CONNECT_COOKIE, code, { maxAge: 60 * 60 * 24, httpOnly: true, sameSite: "lax", path: "/" });
+  redirect((await getUser()) ? "/onboarding" : "/login");
+}
+
+// Tapping Connect on someone's /c/<code> page. Returns { error }, or redirects into the new chat.
+export async function connectInPerson(code) {
+  const { user, profile } = await requireProfile();
+  (await cookies()).delete(CONNECT_COOKIE);
+  const other = CONNECT_CODE.test(code) ? await data.getProfileByConnectCode(code) : null;
+  if (!other) return { error: "This link doesn't work anymore. Ask them to show you their QR code again." };
+  if (other.id === user.id) return { error: "That's your own link. Show it to someone else to connect." };
+
+  // Count it as a mutual right swipe, so they drop out of each other's Builders deck.
+  // An earlier swipe either way already has a row, and the duplicate is ignored.
+  await data.insertBuilderLike({ from_id: user.id, to_id: other.id, direction: "right" });
+  await data.insertBuilderLike({ from_id: other.id, to_id: user.id, direction: "right" });
+  // Same chat as a builder match: user_a is the lower id, so both ways find the same row.
+  const [user_a, user_b] = [user.id, other.id].sort();
+  const chat = await data.createChat({ user_a, user_b, status: "open" });
+  revalidatePath("/matches");
+
+  await logAction("in person connect", { event: "in_person_connect", already_matched: !chat.created });
+  await flushPostHogLogs();
+  if (chat.created) {
+    const chatUrl = `${await appUrl()}/matches/${chat.id}`;
+    await emailAfterResponse(() => sendInPersonConnectEmail({ to: other, from: profile, chatUrl }));
+  }
+  redirect(`/matches/${chat.id}`);
+}
+
+// Makes a new link and QR code, so the old one stops working (e.g. it got posted somewhere public).
+export async function resetConnectCode() {
+  const { user } = await requireProfile();
+  await data.setConnectCode(user.id, newConnectCode());
+  await logAction("connect link reset", { event: "connect_link_reset" });
+  await flushPostHogLogs();
+  revalidatePath("/profile");
 }
 
 export async function setProductHidden(productId, hidden) {

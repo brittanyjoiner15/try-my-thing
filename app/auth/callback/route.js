@@ -4,6 +4,7 @@ import { createAuthClient } from "@/lib/supabase/server";
 import { getProfile, getGitHubProfile, saveGitHubProfile } from "@/lib/data";
 import { fetchGitHubProfile } from "@/lib/github";
 import { GITHUB_LINK_COOKIE } from "@/lib/demo";
+import { CONNECT_COOKIE, CONNECT_CODE } from "@/lib/connect";
 import { captureServerError } from "@/lib/posthog-server";
 import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
 
@@ -25,10 +26,14 @@ export async function GET(request) {
   }
 
   const { user, session } = data;
+  // Signed in from someone's in-person link (see startConnect): go back to it instead of /swipe.
+  // New people get bounced to /onboarding from there, and saveProfile sends them back again.
+  const connectCode = cookieStore.get(CONNECT_COOKIE)?.value;
+  const home = connectCode && CONNECT_CODE.test(connectCode) ? `${origin}/c/${connectCode}` : `${origin}/swipe`;
   // GitHub's token comes back only on this one exchange. Magic links don't have one.
   const githubToken = session.provider_token;
   if (!githubToken || !user.identities?.some((i) => i.provider === "github")) {
-    return NextResponse.redirect(`${origin}/swipe`);
+    return NextResponse.redirect(home);
   }
 
   // Refresh on every GitHub sign-in, so languages and repos stay current.
@@ -51,7 +56,8 @@ export async function GET(request) {
   await flushPostHogLogs();
 
   if (!profile) return NextResponse.redirect(`${origin}/onboarding`); // onboarding prefills from GitHub
+  if (connectCode && !linking) return NextResponse.redirect(home); // connecting beats reviewing suggestions
   // First time GitHub data shows up for an existing profile: send them to review the suggestions.
   if (linking || !before) return NextResponse.redirect(`${origin}/profile?github=${fetched ? "connected" : "error"}`);
-  return NextResponse.redirect(`${origin}/swipe`);
+  return NextResponse.redirect(home);
 }
