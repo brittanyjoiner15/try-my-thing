@@ -86,7 +86,8 @@ export default function ChatThread({ chatId, chatType, meId, themName, initialMe
   }
 
   return (
-    <div className="space-y-4">
+    // pb-24: room at the end of the thread so the pinned message box doesn't cover the last message.
+    <div className="space-y-4 pb-24">
       {offline && <p className="rounded-lg bg-yellow-100 px-3 py-2 text-sm text-yellow-900">Can&apos;t reach the server. Retrying…</p>}
       {/* ph-no-capture: message text stays out of session replays and autocapture. */}
       <ol className="ph-no-capture space-y-2">
@@ -105,7 +106,8 @@ export default function ChatThread({ chatId, chatType, meId, themName, initialMe
             </li>
           );
         })}
-        <li ref={bottom} />
+        {/* scroll-mb: scrollIntoView stops above the pinned message box and tab bar, not behind them. */}
+        <li ref={bottom} className="scroll-mb-40" />
       </ol>
 
       {messages.length === 0 && status === "open" && (
@@ -115,7 +117,12 @@ export default function ChatThread({ chatId, chatType, meId, themName, initialMe
       {status === "pending" ? (
         !iAmBuilder && <p className="panel text-center text-muted">Waiting for {first} to accept. We&apos;ll email you when they do.</p>
       ) : (
-        <form onSubmit={send} className="sticky bottom-20 space-y-1 rounded-2xl bg-background pt-2">
+        // Pinned just above the tab bar (about 3.75rem tall, plus the iPhone home indicator area), even when the thread is short.
+        // TODO: if the tab bar's height changes, update the 3.75rem here.
+        <form
+          onSubmit={send}
+          className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-20 mx-auto max-w-md space-y-1 bg-background px-4 py-2"
+        >
           {error && <p className="text-sm text-red-700">{error}</p>}
           <div className="flex items-end gap-2">
             <textarea
