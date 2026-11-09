@@ -1,6 +1,6 @@
 # try my thing
 
-Tinder for trying software, from the PostHog community. Builders post what they're making, testers swipe through it, and a right swipe sends the builder a request. When the builder accepts, the two of them chat in the app. Emails are never shared between people; the app emails each side about matches and new messages (`lib/match-emails.js`).
+Tinder for trying software. Builders post what they're making, testers swipe through it, and a right swipe sends the builder a request. When the builder accepts, the two of them chat in the app. Emails are never shared between people; the app emails each side about matches and new messages (`lib/match-emails.js`).
 
 **Stack:** Next.js 16 · Supabase (magic-link + GitHub login, Postgres) · Vercel · PostHog (analytics)
 

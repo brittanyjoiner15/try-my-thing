@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Project notes (try my thing)
 
-Tinder for trying software, from the PostHog community. Read `README.md` first for routes and the privacy model.
+Tinder for trying software. Read `README.md` first for routes and the privacy model.
 
 ### Where things run
 - **Hosting:** Netlify (not Vercel, despite the README's Deploy section). Netlify caps function requests at 6MB, which is why `serverActions.bodySizeLimit` is 5MB.

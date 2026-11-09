@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 // Link preview image for Slack, Discord, X and iMessage. Rendered once at build time.
-export const alt = "try my thing: builders post, testers swipe. From the PostHog community.";
+export const alt = "try my thing: builders post, testers swipe.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -30,7 +30,6 @@ export default async function Image() {
             try my thing<span style={{ color: "#f54e00" }}>.</span>
           </div>
           <div style={{ fontSize: 40, color: "#65676f", marginTop: 12 }}>Builders post. Testers swipe.</div>
-          <div style={{ fontSize: 40, color: "#65676f" }}>From the PostHog community.</div>
         </div>
       </div>
     ),

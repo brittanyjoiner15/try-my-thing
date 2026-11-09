@@ -5,7 +5,7 @@ export default function manifest() {
   return {
     name: "try my thing",
     short_name: "try my thing",
-    description: "Builders find real testers. Testers find new tools first. From the PostHog community.",
+    description: "Builders find real testers. Testers find new tools first.",
     start_url: "/",
     display: "browser",
     background_color: "#f7f5ef",
