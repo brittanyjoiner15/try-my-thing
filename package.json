@@ -18,6 +18,7 @@
     "next": "16.4.4",
     "posthog-js": "^1.444.4",
     "posthog-node": "^5.61.2",
+    "qrcode": "^1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

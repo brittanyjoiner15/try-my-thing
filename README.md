@@ -15,6 +15,7 @@ Tinder for trying software. Builders post what they're making, testers swipe thr
 - `/matches/[chatId]`: the chat. It checks for new messages every 5 seconds (no realtime, see the privacy model). The first message is pre-written from `lib/intro.js`. Max 2,000 characters per message and 30 messages per 10 minutes. The other person gets one email per unread stretch, not one per message.
 - `/swipe?mode=builders`: builders who opted in swipe on each other. Ranked by distance, shared problem spaces, shared stack, and what they're looking for (`lib/builder-match.js`). Mutual right swipe = match, and only then do a chat and GitHub/LinkedIn links open up. Both builders get an email. No weekly limit.
 - `/profile`: edit your profile, including the builder fields and the "Show me to other builders" opt-in. City is geocoded with OpenStreetMap Nominatim (`lib/geocode.js`) and stored rounded to ~10 km. Sign out lives here.
+- `/c/[code]`: someone's in-person link, from the QR code on their `/profile`. Tapping Connect opens a chat right away (same as a builder match) and emails the owner. Signed-out visitors sign up and land back here (`tmt_connect` cookie). "Reset link" on `/profile` makes a new code so the old link stops working. Logic in `lib/connect.js` and `connectInPerson` in `app/actions.js`.
 - `/demo`: try the app on fake data without an account (see Demo mode).
 - `/admin`: all matches, and hide/unhide products. Only emails in `ADMIN_EMAILS` can open it.
 
