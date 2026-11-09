@@ -12,7 +12,7 @@ export const metadata = {
   // Makes the link preview image URL absolute. Netlify sets URL to the site's main address at build time.
   metadataBase: new URL(process.env.URL ?? "http://localhost:3000"),
   title: "Try my thing",
-  description: "Builders find real testers. Testers find new tools first. From the PostHog community.",
+  description: "Builders find real testers. Testers find new tools first.",
 };
 
 // viewportFit lets the tab bar sit above the iPhone home indicator (see safe-area padding in BottomNav).
@@ -50,9 +50,8 @@ export default async function RootLayout({ children }) {
             try my thing<span className="text-accent">.</span>
           </Link>
         </header>
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16">{children}</main>
-        {/* Bottom padding keeps the footer clear of the fixed tab bar. */}
-        <footer className={`py-6 text-center text-xs text-muted ${user ? "pb-24" : ""}`}>from the PostHog community</footer>
+        {/* Extra bottom padding when signed in keeps content clear of the fixed tab bar. */}
+        <main className={`mx-auto w-full max-w-3xl flex-1 px-4 ${user ? "pb-32" : "pb-16"}`}>{children}</main>
         {user && <BottomNav showAdmin={isAdmin(user)} userId={user.id} userEmail={user.email} unread={unread} demo={demo} />}
       </body>
     </html>
