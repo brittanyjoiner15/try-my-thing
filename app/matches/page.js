@@ -82,18 +82,18 @@ function ChatRow({ chat, meId, children }) {
       </div>
       <div className="flex flex-wrap items-center gap-3">
         {chat.status === "open" && (
-          <span className="flex gap-3 text-sm">
+          <>
             {them.github_url && (
-              <a href={them.github_url} target="_blank" rel="noreferrer" className="text-accent underline">
-                GitHub ↗
+              <a href={them.github_url} target="_blank" rel="noreferrer" className="btn-ghost text-sm">
+                GitHub
               </a>
             )}
             {them.linkedin_url && (
-              <a href={them.linkedin_url} target="_blank" rel="noreferrer" className="text-accent underline">
-                LinkedIn ↗
+              <a href={them.linkedin_url} target="_blank" rel="noreferrer" className="btn-ghost text-sm">
+                LinkedIn
               </a>
             )}
-          </span>
+          </>
         )}
         {chat.status === "pending" && chat.waitingOnMe.length === 0 && <span className="text-sm text-muted">Waiting to accept</span>}
         {chat.status === "declined" && <span className="text-sm text-muted">Not taking testers</span>}
