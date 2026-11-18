@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import posthog from "posthog-js";
 import { respondToTester } from "@/app/actions";
+import { Spinner } from "@/app/components/SubmitButton";
 
 // Accept / Pass on a tester's request. Used on the Matches page and at the top of a pending chat.
 export default function RespondButtons({ chatId }) {
@@ -30,6 +31,7 @@ export default function RespondButtons({ chatId }) {
       <button className="btn-ghost text-sm" disabled={pending} onClick={() => respond(false)}>
         Pass
       </button>
+      {pending && <Spinner className="h-4 w-4 text-muted" />}
       {error && <span className="text-sm text-red-700">{error}</span>}
     </div>
   );

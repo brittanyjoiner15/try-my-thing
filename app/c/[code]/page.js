@@ -5,6 +5,7 @@ import { CONNECT_CODE } from "@/lib/connect";
 import { startConnect } from "@/app/actions";
 import Avatar from "@/app/components/Avatar";
 import ConnectButton from "./ConnectButton";
+import SubmitButton from "@/app/components/SubmitButton";
 
 export const metadata = { title: "Connect on try my thing" };
 
@@ -50,7 +51,7 @@ export default async function ConnectPage({ params }) {
         <ConnectButton code={code} firstName={owner.name.split(" ")[0]} />
       ) : (
         <form action={startConnect.bind(null, code)} className="space-y-2 text-center">
-          <button className="btn-primary w-full">{user ? "Finish your profile to connect" : "Sign up to connect"}</button>
+          <SubmitButton className="btn-primary w-full">{user ? "Finish your profile to connect" : "Sign up to connect"}</SubmitButton>
           <p className="hint">Takes about a minute. You&apos;ll come right back here.</p>
         </form>
       )}

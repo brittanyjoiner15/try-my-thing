@@ -7,6 +7,7 @@ import posthog from "posthog-js";
 import { saveProfile } from "@/app/actions";
 import ImageInput from "./ImageInput";
 import { ROLES, TOPICS, LOOKING_FOR, TOPICS_MAX, BUILDING_MAX } from "@/lib/profile-options";
+import SubmitButton from "@/app/components/SubmitButton";
 
 export default function ProfileForm({ profile, github, title, intro, submitLabel }) {
   const gh = githubValues(github);
@@ -121,7 +122,7 @@ export default function ProfileForm({ profile, github, title, intro, submitLabel
         When you match, that person sees your name and profile, and you chat in the app. Your email stays private. Builders also see your links after a mutual match.
       </p>
 
-      <button className="btn-primary w-full">{submitLabel}</button>
+      <SubmitButton className="btn-primary w-full" pendingLabel="Saving…">{submitLabel}</SubmitButton>
     </form>
   );
 }

@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/session";
 import { getAdminData } from "@/lib/data";
 import { setProductHidden } from "@/app/actions";
+import SubmitButton from "@/app/components/SubmitButton";
 
 const day = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
@@ -64,7 +65,7 @@ export default async function AdminPage() {
                 </p>
               </div>
               <form action={setProductHidden.bind(null, p.id, !p.hidden)}>
-                <button className="btn-ghost text-sm">{p.hidden ? "Unhide" : "Hide"}</button>
+                <SubmitButton className="btn-ghost text-sm">{p.hidden ? "Unhide" : "Hide"}</SubmitButton>
               </form>
             </div>
           ))}

@@ -4,6 +4,7 @@ import { getDeck, getBuilderCandidates } from "@/lib/data";
 import { rankBuilders } from "@/lib/builder-match";
 import { enableBuilderMatching } from "@/app/actions";
 import SwipeDeck from "./SwipeDeck";
+import SubmitButton from "@/app/components/SubmitButton";
 
 // /swipe = products deck, /swipe?mode=builders = other builders deck.
 export default async function SwipePage({ searchParams }) {
@@ -52,7 +53,7 @@ function OptIn({ profile }) {
             see each other&apos;s email if you both swipe right.
           </p>
           <form action={enableBuilderMatching}>
-            <button className="btn-primary mt-4">Show me to other builders</button>
+            <SubmitButton className="btn-primary mt-4">Show me to other builders</SubmitButton>
           </form>
           <Link href="/profile" className="mt-3 block text-sm text-muted underline">
             Edit my profile first

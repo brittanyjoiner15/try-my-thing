@@ -4,6 +4,7 @@ import { getMyProducts } from "@/lib/data";
 import { createProduct, toggleMyProduct } from "@/app/actions";
 import ProductForm from "@/app/components/ProductForm";
 import { Logo } from "@/app/components/ProductProfile";
+import SubmitButton from "@/app/components/SubmitButton";
 
 export default async function ProductsPage() {
   const { user } = await requireProfile();
@@ -33,7 +34,7 @@ export default async function ProductsPage() {
                     Edit
                   </Link>
                   <form action={toggleMyProduct.bind(null, p.id, !p.hidden)}>
-                    <button className="btn-ghost text-sm">{p.hidden ? "Unpause" : "Pause"}</button>
+                    <SubmitButton className="btn-ghost text-sm">{p.hidden ? "Unpause" : "Pause"}</SubmitButton>
                   </form>
                 </div>
               </div>
