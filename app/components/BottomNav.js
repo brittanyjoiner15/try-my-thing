@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import posthog from "posthog-js";
+import useUnreadCount from "./useUnreadCount";
 
 // App-style tab bar pinned to the bottom of the screen. Icon paths are Heroicons (outline, MIT).
 const ICONS = {
@@ -31,6 +32,7 @@ const tab = "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-sem
 export default function BottomNav({ showAdmin, userId, userEmail, unread = 0, demo = false }) {
   const pathname = usePathname();
   const previousUserId = useRef(null);
+  const liveUnread = useUnreadCount(unread);
 
   useEffect(() => {
     if (previousUserId.current && previousUserId.current !== userId) {
@@ -60,7 +62,7 @@ export default function BottomNav({ showAdmin, userId, userEmail, unread = 0, de
   }, []);
   const tabs = [
     { href: "/swipe", label: "Swipe", icon: "swipe" },
-    { href: "/matches", label: "Matches", icon: "matches", badge: unread },
+    { href: "/matches", label: "Matches", icon: "matches", badge: liveUnread },
     { href: "/products", label: "My products", icon: "products" },
     { href: "/profile", label: "Profile", icon: "profile" },
     ...(showAdmin ? [{ href: "/admin", label: "Admin", icon: "admin" }] : []),
