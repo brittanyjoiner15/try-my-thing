@@ -568,3 +568,11 @@ export async function pollChat(chatId, sinceIso) {
   if (messages.some((m) => m.sender_id !== user.id)) await data.touchChat(chatId, chat.me, "read");
   return { messages, status: chat.status, requests: chat.requests };
 }
+
+// Polled by the tab bar so the Matches badge and the browser tab title stay current between page loads.
+// Returns null when signed out, so a tab left open after sign-out stops showing a count.
+export async function pollUnread() {
+  const user = await getUser();
+  if (!user) return null;
+  return data.countUnreadChats(user.id);
+}

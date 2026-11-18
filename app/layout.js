@@ -28,7 +28,7 @@ export const viewport = {
 export default async function RootLayout({ children }) {
   const user = await getUser();
   const demo = await isDemo();
-  // Tab bar badge. Updates on page loads and server actions, not live. TODO: poll it if people miss messages.
+  // Tab bar badge's starting value. BottomNav polls it after that (pollUnread in app/actions.js).
   const unread = user ? await countUnreadChats(user.id) : 0;
 
   return (
