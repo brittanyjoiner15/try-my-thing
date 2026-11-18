@@ -4,6 +4,7 @@
 import posthog from "posthog-js";
 import ImageInput from "./ImageInput";
 import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX } from "@/lib/product-options";
+import SubmitButton from "@/app/components/SubmitButton";
 
 export default function ProductForm({ action, product, title, intro, submitLabel }) {
   return (
@@ -134,7 +135,7 @@ export default function ProductForm({ action, product, title, intro, submitLabel
         </div>
       </div>
 
-      <button className="btn-primary w-full">{submitLabel}</button>
+      <SubmitButton className="btn-primary w-full" pendingLabel="Saving…">{submitLabel}</SubmitButton>
     </form>
   );
 }

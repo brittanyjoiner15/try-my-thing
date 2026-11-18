@@ -22,7 +22,8 @@ const KINDS = {
     stamp: "TRY IT",
     pages: productPages,
     Footer: ProductFooter,
-    Match: MatchScreen,
+    // A request isn't a match yet, so it gets a toast and the deck keeps going.
+    toast: (match) => `Request sent to ${match.builderName.split(" ")[0]} ✓`,
     Empty: ProductsEmpty,
     help: (card) => `Try it = ${card.builder} gets a request. If they accept, you chat.`,
   },
@@ -48,6 +49,7 @@ export default function SwipeDeck({ kind, initialCards }) {
   const [flying, setFlying] = useState(null); // "left" | "right" while the card animates out
   const [message, setMessage] = useState(null);
   const [match, setMatch] = useState(null); // shown after a right swipe that made a match
+  const [toast, setToast] = useState(null);
   const [, startTransition] = useTransition();
   const dragStart = useRef(null);
   const [dragging, setDragging] = useState(false);
@@ -71,7 +73,8 @@ export default function SwipeDeck({ kind, initialCards }) {
       posthog.capture(k.event, { direction, [k.eventProp]: card.id });
       if (result?.match) {
         posthog.capture(k.matchEvent);
-        setMatch(result.match);
+        if (k.toast) setToast({ text: k.toast(result.match), id: Date.now() });
+        else setMatch(result.match);
       }
     });
 
@@ -94,11 +97,19 @@ export default function SwipeDeck({ kind, initialCards }) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // Hide the toast a few seconds after it shows. A new swipe restarts the timer via the id.
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   if (match) return <k.Match match={match} onDone={() => setMatch(null)} />;
 
   if (!card) {
     return (
       <div className="panel mx-auto mt-8 max-w-md text-center">
+        <Toast toast={toast} />
         {message && <Message {...message} />}
         <k.Empty />
       </div>
@@ -109,6 +120,7 @@ export default function SwipeDeck({ kind, initialCards }) {
 
   return (
     <div className="mx-auto max-w-md pt-4">
+      <Toast toast={toast} />
       {message && <Message {...message} />}
 
       <div
@@ -148,8 +160,8 @@ export default function SwipeDeck({ kind, initialCards }) {
           setDx(0);
         }}
       >
-        <Stamp show={offset > 40} className="left-4 border-green-600 bg-card text-green-600">{k.stamp}</Stamp>
-        <Stamp show={offset < -40} className="right-4 border-muted bg-card text-muted">SKIP</Stamp>
+        <Stamp show={offset > 40} className="left-4 -rotate-12 border-green-600 text-green-600">{k.stamp}</Stamp>
+        <Stamp show={offset < -40} className="right-4 rotate-12 border-red-500 text-red-500">SKIP</Stamp>
 
         {pages.length > 1 && (
           <div className="absolute inset-x-3 top-2 z-10 flex gap-1">
@@ -274,7 +286,7 @@ function CardPage({ card, page }) {
 function Stamp({ show, className, children }) {
   return (
     <span
-      className={`absolute top-6 z-20 rounded-md border-2 px-2 py-1 text-sm font-black transition-opacity ${className}`}
+      className={`absolute top-6 z-20 rounded-md border-4 bg-card px-3 py-1 text-2xl font-black tracking-wider transition-opacity ${className}`}
       style={{ opacity: show ? 1 : 0 }}
     >
       {children}
@@ -294,23 +306,17 @@ function Message({ type, text }) {
   );
 }
 
-function MatchScreen({ match, onDone }) {
-  const first = match.builderName.split(" ")[0];
-
+// Small pill that floats above the tab bar after a right swipe. Doesn't block the deck.
+function Toast({ toast }) {
+  if (!toast) return null;
   return (
-    <div className="panel mx-auto mt-8 max-w-md text-center">
-      <h1 className="text-3xl font-bold">Request sent</h1>
-      <p className="mt-2 text-muted">
-        {first} wants testers for {match.product}. When they accept, a chat opens and we&apos;ll email you.
-      </p>
-      <div className="mt-4 flex flex-col gap-2">
-        <Link href="/matches" className="btn-ghost">
-          See my matches
+    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center px-4" role="status">
+      <p key={toast.id} className="pointer-events-auto flex items-center gap-3 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-lg">
+        {toast.text}
+        <Link href="/matches" className="text-accent underline">
+          See matches
         </Link>
-        <button className="mt-2 text-sm text-muted underline" onClick={onDone}>
-          Keep swiping
-        </button>
-      </div>
+      </p>
     </div>
   );
 }

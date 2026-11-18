@@ -39,6 +39,12 @@ fieldset {
   min-width: 0;
 }
 
+/* Tailwind v4 dropped the pointer cursor on buttons. Bring it back so they feel clickable on desktop. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 /* Small shared building blocks so pages stay readable. */
 @utility btn {
   @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition active:scale-95 disabled:opacity-50;
