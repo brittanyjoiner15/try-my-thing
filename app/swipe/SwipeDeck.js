@@ -63,8 +63,19 @@ export default function SwipeDeck({ kind, initialCards }) {
     setFlying(direction);
     setMessage(null);
 
+    // On the last card, wait for the server before showing the empty state, so the
+    // "request sent" note arrives with it instead of popping in a moment later.
+    const isLast = cards.length === 1;
+    const dropCard = () => {
+      setCards((c) => c.slice(1));
+      setPage(0);
+      setFlying(null);
+      setDx(0);
+    };
+
     startTransition(async () => {
       const result = await k.action(card.id, direction);
+      if (isLast) dropCard();
       if (result?.error) {
         setMessage({ type: "error", text: result.error });
         return;
@@ -79,12 +90,7 @@ export default function SwipeDeck({ kind, initialCards }) {
     });
 
     // Let the fly-out animation play, then drop the card.
-    setTimeout(() => {
-      setCards((c) => c.slice(1));
-      setPage(0);
-      setFlying(null);
-      setDx(0);
-    }, 250);
+    if (!isLast) setTimeout(dropCard, 250);
   }
 
   useEffect(() => {
@@ -98,18 +104,27 @@ export default function SwipeDeck({ kind, initialCards }) {
   });
 
   // Hide the toast a few seconds after it shows. A new swipe restarts the timer via the id.
+  // On the empty screen the note sits inline in the panel, so it stays put.
   useEffect(() => {
-    if (!toast) return;
+    if (!toast || !cards.length) return;
     const t = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(t);
-  }, [toast]);
+  }, [toast, cards.length]);
 
   if (match) return <k.Match match={match} onDone={() => setMatch(null)} />;
 
   if (!card) {
     return (
       <div className="panel mx-auto mt-8 max-w-md text-center">
-        <Toast toast={toast} />
+        {/* Inline, not the floating pill, so it can't cover the empty-state buttons. */}
+        {toast && (
+          <p className="mb-4 rounded-lg bg-green-100 px-4 py-3 text-sm text-green-800" role="status">
+            {toast.text}{" "}
+            <Link href="/matches" className="font-semibold underline">
+              See matches
+            </Link>
+          </p>
+        )}
         {message && <Message {...message} />}
         <k.Empty />
       </div>
