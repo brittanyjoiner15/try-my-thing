@@ -44,8 +44,8 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 
 ### Database migrations
 - Migrations are applied **by hand** and aren't in Supabase's migration history. Never run `supabase db push`, because it would re-run the init migration.
-- Apply with `supabase db query --linked --project-ref kwuossjlcjpzmhmlzhuu -f <file>`. Run this from a scratch folder that holds a copy of `supabase/migrations/`: inside the repo, the CLI fails with "failed to parse environment file: .env.local".
-- Applied so far: `20261103000000_init`, `20261104000000_product_profiles`, `20261104010000_featured_products`, `20261105000000_builder_matching`, `20261105010000_profile_photos`, `20261106000000_chat`, `20261107000000_github_profiles`, `20261107010000_featured_repos`, `20261109000000_connect_codes`, `20261118000000_one_chat_per_pair`. Not applied yet: `20261118000000_claim_links`.
+- Apply with `supabase db query --remote=kwuossjlcjpzmhmlzhuu -f <file>` (CLI v3+; `--linked --project-ref` is deprecated). Agents must ask Britt before adding `--yes`, which the CLI requires for writes; read-only checks use `--read-only`. On the devbox the CLI token lives in `~/.supabase/access-token` (`supabase login` needs a TTY). Run this from a scratch folder that holds a copy of `supabase/migrations/`: inside the repo, the CLI fails with "failed to parse environment file: .env.local".
+- Applied so far: `20261103000000_init`, `20261104000000_product_profiles`, `20261104010000_featured_products`, `20261105000000_builder_matching`, `20261105010000_profile_photos`, `20261106000000_chat`, `20261107000000_github_profiles`, `20261107010000_featured_repos`, `20261109000000_connect_codes`, `20261118000000_claim_links`, `20261118000000_one_chat_per_pair`.
 
 ### Testing
 - Don't run `pnpm install` while the dev server is running. Turbopack keeps the old module paths, and the page gets stuck in a full-reload loop. If that happens, Britt restarts the server with `rm -rf .next && pnpm dev`.
