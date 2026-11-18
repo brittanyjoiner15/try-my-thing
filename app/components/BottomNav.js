@@ -77,7 +77,7 @@ export default function BottomNav({ showAdmin, userId, userEmail, unread = 0, de
             <Link key={t.href} href={t.href} className={`${tab} relative ${active ? "text-accent" : "text-muted hover:text-foreground"}`}>
               <Icon name={t.icon} />
               {t.badge > 0 && (
-                <span className="absolute top-1 left-1/2 ml-2 min-w-4 rounded-full bg-accent px-1 text-[10px] leading-4 text-white">
+                <span className="absolute top-1 left-1/2 ml-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] leading-none text-white tabular-nums">
                   {t.badge > 9 ? "9+" : t.badge}
                 </span>
               )}
