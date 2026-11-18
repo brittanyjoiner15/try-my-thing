@@ -29,9 +29,15 @@ export default async function ChatPage({ params }) {
         ← Matches
       </Link>
       <header className="flex items-center gap-3">
-        <Avatar name={chat.them.name} url={chat.them.avatar_url} />
+        <Link href={`/matches/${chatId}/profile`} aria-label={`${chat.them.name}'s profile`}>
+          <Avatar name={chat.them.name} url={chat.them.avatar_url} />
+        </Link>
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold">{chat.them.name}</h1>
+          <h1 className="truncate text-xl font-bold">
+            <Link href={`/matches/${chatId}/profile`} className="hover:underline">
+              {chat.them.name}
+            </Link>
+          </h1>
           <p className="truncate text-sm text-muted">{pairSummary(chat, user.id)}</p>
         </div>
       </header>
