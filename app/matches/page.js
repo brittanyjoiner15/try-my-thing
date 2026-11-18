@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireProfile } from "@/lib/session";
-import { getChats } from "@/lib/data";
+import { getChats, getUnreadMessageCounts } from "@/lib/data";
 import { pairSummary } from "@/lib/chat-summary";
 import Avatar from "@/app/components/Avatar";
 import RespondButtons from "./RespondButtons";
@@ -24,6 +24,25 @@ function BrandLink({ href, name }) {
   );
 }
 
+// Chat bubble icon. Filled orange with a count badge when there are unread messages, plain otherwise.
+// Icon-only like the GitHub/LinkedIn links next to it; aria-label/title carry the words.
+function ChatLink({ chat }) {
+  const n = chat.unreadCount || (chat.unread ? 1 : 0); // unread with no count = count query capped out, still show something
+  const label = n > 0 ? `Open chat, ${n} unread` : "Open chat";
+  return (
+    <Link href={`/matches/${chat.id}`} aria-label={label} title={label} className={`${n > 0 ? "btn-primary" : "btn-ghost"} relative px-2.5!`}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+        <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
+      </svg>
+      {n > 0 && (
+        <span className="absolute -top-2 -right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[11px] font-bold text-card tabular-nums">
+          {n > 9 ? "9+" : n}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 const day = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 const lastActive = (c) => c.last_message_at ?? c.created_at;
 
@@ -32,6 +51,8 @@ const lastActive = (c) => c.last_message_at ?? c.created_at;
 export default async function MatchesPage() {
   const { user } = await requireProfile();
   const chats = (await getChats(user.id)).sort((a, b) => lastActive(b).localeCompare(lastActive(a)));
+  const unreadCounts = await getUnreadMessageCounts(user.id, chats);
+  for (const c of chats) c.unreadCount = unreadCounts[c.id] ?? 0;
   const waiting = chats.filter((c) => c.waitingOnMe.length > 0);
   // A declined chat only shows to the tester ("not taking testers"). The builder who passed doesn't need it.
   const rest = chats.filter(
@@ -86,7 +107,7 @@ export default async function MatchesPage() {
 function ChatRow({ chat, meId, children }) {
   const { them } = chat;
   return (
-    <div className={`panel flex flex-wrap items-center justify-between gap-4 py-4 ${chat.unread ? "ring-2 ring-accent" : ""}`}>
+    <div className="panel flex flex-wrap items-center justify-between gap-4 py-4">
       <div className="flex min-w-0 items-start gap-3">
         <Avatar name={them.name} url={them.avatar_url} />
         <div className="min-w-0">
@@ -107,15 +128,7 @@ function ChatRow({ chat, meId, children }) {
         )}
         {chat.status === "pending" && chat.waitingOnMe.length === 0 && <span className="text-sm text-muted">Waiting to accept</span>}
         {chat.status === "declined" && <span className="text-sm text-muted">Not taking testers</span>}
-        {chat.status === "open" && (
-          // "Open chat", not "Message": it's where you read the conversation too, not only where you start one.
-          <Link href={`/matches/${chat.id}`} className="btn-primary relative text-sm">
-            {chat.unread ? "Read new message" : "Open chat"}
-            {chat.unread && (
-              <span className="absolute -top-2 -right-2 rounded-full bg-foreground px-1.5 text-[10px] leading-4 font-bold text-card">New</span>
-            )}
-          </Link>
-        )}
+        {chat.status === "open" && <ChatLink chat={chat} />}
       </div>
       {children}
     </div>
