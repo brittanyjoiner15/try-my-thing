@@ -2,18 +2,21 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { swipe, swipeBuilder } from "@/app/actions";
+import { swipe, swipeBuilder, enableBuilderMatching } from "@/app/actions";
 import { Logo } from "@/app/components/ProductProfile";
 import Avatar from "@/app/components/Avatar";
 import InviteButton from "@/app/components/InviteButton";
+import { OPT_IN_DISMISSED } from "./optin";
 
 const THRESHOLD = 110; // px of drag before a release counts as a swipe
 const TAP = 6; // px of movement still treated as a tap (flips the card's page)
 
-// Per-deck differences. Everything else (drag, tap-through pages, keys) is shared.
+
+// Per-card-type differences (card.type). Everything else (drag, tap-through pages, keys) is shared.
 const KINDS = {
-  products: {
+  product: {
     action: swipe,
     event: "product_swiped",
     matchEvent: "product_match_created",
@@ -22,12 +25,16 @@ const KINDS = {
     stamp: "TRY IT",
     pages: productPages,
     Footer: ProductFooter,
-    // A request isn't a match yet, so it gets a toast and the deck keeps going.
-    toast: (match) => `Request sent to ${match.builderName.split(" ")[0]} ✓`,
-    Empty: ProductsEmpty,
+    // A request isn't a match yet, so it gets a toast and the deck keeps going. Already chatting with the
+    // builder: the request went straight into that chat.
+    toast: (match) => ({
+      text: match.accepted ? `Added to your chat with ${match.builderName.split(" ")[0]} ✓` : `Request sent to ${match.builderName.split(" ")[0]} ✓`,
+      href: match.accepted ? `/matches/${match.chatId}` : "/matches",
+      link: match.accepted ? "Open chat" : "See matches",
+    }),
     help: (card) => `Try it = ${card.builder} gets a request. If they accept, you chat.`,
   },
-  builders: {
+  builder: {
     action: swipeBuilder,
     event: "builder_swiped",
     matchEvent: "builder_match_created",
@@ -36,14 +43,20 @@ const KINDS = {
     stamp: "CONNECT",
     pages: builderPages,
     Footer: BuilderFooter,
-    Match: BuilderMatchScreen,
-    Empty: BuildersEmpty,
     help: (card) => `If ${card.name} swipes right on you too, a chat opens.`,
+  },
+  // Not a person or product: one card for people who haven't turned on builder matching.
+  optin: {
+    yes: "Turn it on",
+    stamp: "YES",
+    pages: () => [{ type: "optin" }],
+    Footer: () => null,
+    help: () => "Skip to keep swiping products only.",
   },
 };
 
-export default function SwipeDeck({ kind, initialCards }) {
-  const k = KINDS[kind];
+export default function SwipeDeck({ initialCards }) {
+  const router = useRouter();
   const [cards, setCards] = useState(initialCards);
   const [dx, setDx] = useState(0);
   const [flying, setFlying] = useState(null); // "left" | "right" while the card animates out
@@ -56,10 +69,12 @@ export default function SwipeDeck({ kind, initialCards }) {
   const [page, setPage] = useState(0); // which page of the current card is showing
 
   const card = cards[0];
+  const k = card ? KINDS[card.type] : null;
   const pages = card ? k.pages(card) : [];
 
   function decide(direction) {
     if (!card || flying) return;
+    if (card.type === "optin") return decideOptIn(direction);
     setFlying(direction);
     setMessage(null);
 
@@ -84,13 +99,32 @@ export default function SwipeDeck({ kind, initialCards }) {
       posthog.capture(k.event, { direction, [k.eventProp]: card.id });
       if (result?.match) {
         posthog.capture(k.matchEvent);
-        if (k.toast) setToast({ text: k.toast(result.match), id: Date.now() });
+        if (k.toast) setToast({ ...k.toast(result.match), id: Date.now() });
         else setMatch(result.match);
       }
     });
 
     // Let the fly-out animation play, then drop the card.
     if (!isLast) setTimeout(dropCard, 250);
+  }
+
+  // Right = turn on builder matching (one tap if their builder fields are filled in, else /profile). Left = not now.
+  function decideOptIn(direction) {
+    posthog.capture("builder_optin_card_answered", { choice: direction === "right" ? "yes" : "skip", ready: card.ready });
+    if (direction === "right") {
+      if (card.ready) startTransition(() => enableBuilderMatching()); // redirects to /swipe with builders in the deck
+      else router.push("/profile");
+      return;
+    }
+    // Remembered for a year in a cookie, so app/swipe/page.js leaves the card out next time.
+    document.cookie = `${OPT_IN_DISMISSED}=1; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+    setFlying("left");
+    setTimeout(() => {
+      setCards((c) => c.slice(1));
+      setPage(0);
+      setFlying(null);
+      setDx(0);
+    }, 250);
   }
 
   useEffect(() => {
@@ -111,7 +145,8 @@ export default function SwipeDeck({ kind, initialCards }) {
     return () => clearTimeout(t);
   }, [toast, cards.length]);
 
-  if (match) return <k.Match match={match} onDone={() => setMatch(null)} />;
+  // Only builder swipes make a match screen (product requests get a toast). Not k.Match: the next card may be a product.
+  if (match) return <BuilderMatchScreen match={match} onDone={() => setMatch(null)} />;
 
   if (!card) {
     return (
@@ -120,13 +155,13 @@ export default function SwipeDeck({ kind, initialCards }) {
         {toast && (
           <p className="mb-4 rounded-lg bg-green-100 px-4 py-3 text-sm text-green-800" role="status">
             {toast.text}{" "}
-            <Link href="/matches" className="font-semibold underline">
-              See matches
+            <Link href={toast.href} className="font-semibold underline">
+              {toast.link}
             </Link>
           </p>
         )}
         {message && <Message {...message} />}
-        <k.Empty />
+        <DeckEmpty />
       </div>
     );
   }
@@ -229,6 +264,20 @@ function builderPages(card) {
 }
 
 function CardPage({ card, page }) {
+  if (page.type === "optin") {
+    return (
+      <div className="flex h-full flex-col justify-center gap-3 bg-accent/10 p-6 text-center">
+        <p className="text-sm font-semibold text-muted">Builders, not just products</p>
+        <p className="text-2xl font-bold leading-snug">Meet other builders here too?</p>
+        <p className="text-muted">
+          {card.ready
+            ? "Your builder profile is ready, but you're hidden from other builders. Turn it on and they'll show up in this deck."
+            : "Add what you're building and what you're looking for, and other builders will show up in this deck."}{" "}
+          You only chat if you both swipe right.
+        </p>
+      </div>
+    );
+  }
   if (page.type === "screenshot") {
     return (
       <div className="flex h-full items-center justify-center bg-background px-4 pb-3 pt-6">
@@ -328,8 +377,8 @@ function Toast({ toast }) {
     <div className="pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center px-4" role="status">
       <p key={toast.id} className="pointer-events-auto flex items-center gap-3 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-lg">
         {toast.text}
-        <Link href="/matches" className="text-accent underline">
-          See matches
+        <Link href={toast.href} className="text-accent underline">
+          {toast.link}
         </Link>
       </p>
     </div>
@@ -395,32 +444,20 @@ function BuilderFooter({ card }) {
   );
 }
 
-// Empty decks are common while the app is small, so they point at the two things that refill them.
-function ProductsEmpty() {
+// Empty decks are common while the app is small, so this points at the things that refill it.
+function DeckEmpty() {
   return (
     <>
       <h1 className="text-2xl font-bold">You&apos;ve seen everything</h1>
       <p className="mt-2 text-muted">
-        New products show up as builders join. Know someone who&apos;s building something? Send them the link.
+        New products and builders show up as people join. Know someone who&apos;s building something? Send them the link.
       </p>
       <div className="mt-4 flex flex-col gap-2">
-        <InviteButton source="products_empty" label="Invite a builder" />
+        <InviteButton source="deck_empty" label="Invite a builder" />
         <Link href="/products" className="btn-ghost">
           Post my product
         </Link>
-      </div>
-    </>
-  );
-}
-
-function BuildersEmpty() {
-  return (
-    <>
-      <h1 className="text-2xl font-bold">You&apos;ve met everyone</h1>
-      <p className="mt-2 text-muted">New builders show up as they join. Invite someone you&apos;d want to meet.</p>
-      <div className="mt-4 flex flex-col gap-2">
-        <InviteButton source="builders_empty" label="Invite a builder" />
-        <Link href="/matches" className="btn-ghost">
+        <Link href="/matches" className="text-sm text-muted underline">
           See my matches
         </Link>
       </div>

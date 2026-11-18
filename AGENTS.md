@@ -45,6 +45,7 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 - Migrations are applied **by hand** and aren't in Supabase's migration history. Never run `supabase db push`, because it would re-run the init migration.
 - Apply with `supabase db query --linked --project-ref kwuossjlcjpzmhmlzhuu -f <file>`. Run this from a scratch folder that holds a copy of `supabase/migrations/`: inside the repo, the CLI fails with "failed to parse environment file: .env.local".
 - Applied so far: `20261103000000_init`, `20261104000000_product_profiles`, `20261104010000_featured_products`, `20261105000000_builder_matching`, `20261105010000_profile_photos`, `20261106000000_chat`, `20261107000000_github_profiles`, `20261107010000_featured_repos`, `20261109000000_connect_codes`.
+- **Not applied yet:** `20261118000000_one_chat_per_pair` (merges chats into one per pair, adds `product_requests`). Apply it right before deploying the code that uses it: the old code breaks on the new schema and the new code breaks on the old one.
 
 ### Testing
 - Don't run `pnpm install` while the dev server is running. Turbopack keeps the old module paths, and the page gets stuck in a full-reload loop. If that happens, Britt restarts the server with `rm -rf .next && pnpm dev`.
@@ -55,9 +56,9 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 ### Open follow-ups
 - Point `trymything.app` at Netlify, then set the Supabase Site URL and Redirect URLs to it.
 - Branded Supabase email templates (they still use the plain defaults).
-- Chat: block/report, live unread badge (it only updates on page loads), and a "Remove" for declined requests. Declined testers still count toward a product's `max_testers`.
+- Chat: block/report, live unread badge (it only updates on page loads), and a "Remove" for declined requests.
 - "Remove image" button, and deleting replaced images from storage (TODO in `app/actions.js`).
-- GitHub: ranking the Builders deck on shared GitHub languages (skipped until there are enough builders). LinkedIn's API only returns name/email/photo, so it stays a plain URL field.
+- GitHub: ranking builder cards on shared GitHub languages (skipped until there are enough builders). LinkedIn's API only returns name/email/photo, so it stays a plain URL field.
 - Builder matches aren't shown on `/admin` yet.
 - PostHog event for card page taps, to see whether testers flip through prompts.
 - PostHog follow-ups (details in `docs/posthog-wizard-review.md`): log failures in `app/actions.js` and move the log flush into `after()`; add a server-side `user_signed_in` event with `is_new_user` in `app/auth/callback/route.js`; add IDs to the match events; add a reverse proxy for ad blockers.

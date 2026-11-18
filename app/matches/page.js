@@ -1,83 +1,60 @@
 import Link from "next/link";
 import { requireProfile } from "@/lib/session";
 import { getChats } from "@/lib/data";
+import { pairSummary } from "@/lib/chat-summary";
 import Avatar from "@/app/components/Avatar";
 import RespondButtons from "./RespondButtons";
 
 const day = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const lastActive = (c) => c.last_message_at ?? c.created_at;
 
-// Every match is a chat. Three groups: testers asking to try my products, products I asked to try, and builder matches.
+// One row per person: every product request and builder match between two people lives in one chat.
+// "Waiting on you" = someone asked to try one of my products and I haven't answered.
 export default async function MatchesPage() {
   const { user } = await requireProfile();
-  const chats = await getChats(user.id);
-  const testers = chats.filter((c) => c.product?.owner_id === user.id && c.status !== "declined");
-  const tried = chats.filter((c) => c.product && c.product.owner_id !== user.id);
-  const builders = chats.filter((c) => !c.product);
+  const chats = (await getChats(user.id)).sort((a, b) => lastActive(b).localeCompare(lastActive(a)));
+  const waiting = chats.filter((c) => c.waitingOnMe.length > 0);
+  // A declined chat only shows to the tester ("not taking testers"). The builder who passed doesn't need it.
+  const rest = chats.filter(
+    (c) => c.waitingOnMe.length === 0 && (c.status !== "declined" || c.requests.some((r) => r.tester_id === user.id)),
+  );
 
   return (
     <div className="space-y-10">
-      <section>
-        <h1 className="text-2xl font-bold">People who want to try your products</h1>
-        <p className="mt-1 text-muted">Accept a tester to start chatting. Pass if it&apos;s not a fit.</p>
-        <div className="mt-4 space-y-2">
-          {testers.map((c) => (
-            <ChatRow key={c.id} chat={c} subtitle={`→ ${c.product.name} · ${c.them.role} · ${c.them.stack}`}>
-              {c.status === "pending" && <RespondButtons chatId={c.id} />}
-            </ChatRow>
-          ))}
-          {testers.length === 0 && (
-            <p className="text-muted">
-              No testers yet. <Link href="/products" className="underline">Post a product</Link> to get some.
-            </p>
-          )}
-        </div>
-      </section>
+      {waiting.length > 0 && (
+        <section>
+          <h1 className="text-2xl font-bold">Waiting on you</h1>
+          <p className="mt-1 text-muted">They want to try your products. Accept to start chatting, or pass if it&apos;s not a fit.</p>
+          <div className="mt-4 space-y-2">
+            {waiting.map((c) => (
+              <ChatRow key={c.id} chat={c} meId={user.id}>
+                <ul className="w-full space-y-2 border-t border-border pt-3">
+                  {c.waitingOnMe.map((r) => (
+                    <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <span>
+                        Wants to try <span className="font-semibold">{r.product.name}</span>
+                      </span>
+                      <RespondButtons requestId={r.id} />
+                    </li>
+                  ))}
+                </ul>
+              </ChatRow>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section>
-        <h2 className="text-2xl font-bold">Products you want to try</h2>
-        <p className="mt-1 text-muted">Once the builder accepts, ask them how to get access.</p>
+        <h2 className="text-2xl font-bold">Your matches</h2>
+        <p className="mt-1 text-muted">Testers, builders, and products you asked to try. One chat per person.</p>
         <div className="mt-4 space-y-2">
-          {tried.map((c) => (
-            <ChatRow key={c.id} chat={c} title={c.product.name} subtitle={`by ${c.them.name}`}>
-              {c.status === "pending" && <span className="text-sm text-muted">Waiting to accept</span>}
-              {c.status === "declined" && <span className="text-sm text-muted">Not taking testers</span>}
-            </ChatRow>
+          {rest.map((c) => (
+            <ChatRow key={c.id} chat={c} meId={user.id} />
           ))}
-          {tried.length === 0 && (
+          {rest.length === 0 && (
             <p className="text-muted">
-              Nothing yet. <Link href="/swipe" className="underline">Start swiping</Link>.
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-2xl font-bold">Builders you matched with</h2>
-        <p className="mt-1 text-muted">You both swiped right. Say hi, swap feedback, or grab a coffee.</p>
-        <div className="mt-4 space-y-2">
-          {builders.map((c) => (
-            <ChatRow key={c.id} chat={c} subtitle={[c.them.role, c.them.building, c.them.location].filter(Boolean).join(" · ")}>
-              <span className="flex gap-3 text-sm">
-                {c.them.github_url && (
-                  <a href={c.them.github_url} target="_blank" rel="noreferrer" className="text-accent underline">
-                    GitHub ↗
-                  </a>
-                )}
-                {c.them.linkedin_url && (
-                  <a href={c.them.linkedin_url} target="_blank" rel="noreferrer" className="text-accent underline">
-                    LinkedIn ↗
-                  </a>
-                )}
-              </span>
-            </ChatRow>
-          ))}
-          {builders.length === 0 && (
-            <p className="text-muted">
-              No builder matches yet.{" "}
-              <Link href="/swipe?mode=builders" className="underline">
-                Meet some builders
-              </Link>
-              .
+              No matches yet. <Link href="/swipe" className="underline">Start swiping</Link>, or{" "}
+              <Link href="/products" className="underline">post a product</Link> to get testers.
             </p>
           )}
         </div>
@@ -86,30 +63,47 @@ export default async function MatchesPage() {
   );
 }
 
-// One match. "Message" only shows once the chat is open (accepted, or a builder match).
-function ChatRow({ chat, title = chat.them.name, subtitle, children }) {
+// One person. "Message" shows once the chat is open (an accepted request, a builder match, or an in-person connect).
+function ChatRow({ chat, meId, children }) {
+  const { them } = chat;
   return (
     <div className="panel flex flex-wrap items-center justify-between gap-4 py-4">
       <div className="flex min-w-0 items-start gap-3">
-        <Avatar name={chat.them.name} url={chat.them.avatar_url} />
+        <Avatar name={them.name} url={them.avatar_url} />
         <div className="min-w-0">
           <p className="font-bold">
-            {title}
+            {them.name}
             {chat.unread && <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-white">New</span>}
           </p>
           <p className="text-sm text-muted">
-            {subtitle} · {chat.last_message_at ? `last message ${day(chat.last_message_at)}` : `matched ${day(chat.created_at)}`}
+            {pairSummary(chat, meId)} · {chat.last_message_at ? `last message ${day(chat.last_message_at)}` : `matched ${day(chat.created_at)}`}
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {children}
+      <div className="flex flex-wrap items-center gap-3">
+        {chat.status === "open" && (
+          <span className="flex gap-3 text-sm">
+            {them.github_url && (
+              <a href={them.github_url} target="_blank" rel="noreferrer" className="text-accent underline">
+                GitHub ↗
+              </a>
+            )}
+            {them.linkedin_url && (
+              <a href={them.linkedin_url} target="_blank" rel="noreferrer" className="text-accent underline">
+                LinkedIn ↗
+              </a>
+            )}
+          </span>
+        )}
+        {chat.status === "pending" && chat.waitingOnMe.length === 0 && <span className="text-sm text-muted">Waiting to accept</span>}
+        {chat.status === "declined" && <span className="text-sm text-muted">Not taking testers</span>}
         {chat.status === "open" && (
           <Link href={`/matches/${chat.id}`} className="btn-primary text-sm">
             Message
           </Link>
         )}
       </div>
+      {children}
     </div>
   );
 }

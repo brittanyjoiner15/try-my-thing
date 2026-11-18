@@ -19,7 +19,7 @@ export default function WelcomeActions() {
       <Link href="/swipe" className="btn-ghost" onClick={choose("swipe")}>
         Just swipe for now
       </Link>
-      <Link href="/swipe?mode=builders" className="mt-1 text-center text-sm text-muted underline" onClick={choose("builders")}>
+      <Link href="/profile" className="mt-1 text-center text-sm text-muted underline" onClick={choose("builders")}>
         Set up builder matching
       </Link>
     </div>
