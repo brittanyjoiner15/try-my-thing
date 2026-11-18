@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAuthClient } from "@/lib/supabase/server";
 import { DEMO_ENV, DEMO_GITHUB, GITHUB_LINK_COOKIE, isDemo } from "@/lib/demo";
-import { getUser, requireProfile, requireAdmin } from "@/lib/session";
+import { getUser, requireProfile, requireAdmin, isAdmin } from "@/lib/session";
 import * as data from "@/lib/data";
 import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TYPES } from "@/lib/product-options";
 import { ROLES, TOPICS, LOOKING_FOR, TOPICS_MAX, BUILDING_MAX } from "@/lib/profile-options";
@@ -16,6 +16,7 @@ import { captureServerError } from "@/lib/posthog-server";
 import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
 import { sendProductMatchEmails, sendBuilderMatchEmails, sendChatAcceptedEmail, sendNewMessageEmail, sendInPersonConnectEmail } from "@/lib/match-emails";
 import { CONNECT_COOKIE, CONNECT_CODE, newConnectCode } from "@/lib/connect";
+import { CLAIM_COOKIE, CLAIM_CODE, newClaimCode } from "@/lib/claim";
 
 // Keeps testers from right-swiping everything and flooding builders with no-shows.
 const MAX_RIGHT_SWIPES_PER_WEEK = 3;
@@ -196,10 +197,13 @@ export async function saveProfile(formData) {
     revalidatePath("/profile");
     redirect("/profile?saved=1");
   }
-  // Signed up from someone's in-person link: take them back to it. They skip /welcome, which is fine
-  // since they're about to land in a chat.
-  const connectCode = (await cookies()).get(CONNECT_COOKIE)?.value;
+  // Signed up from someone's in-person link or a claim link: take them back to it. They skip /welcome,
+  // which is fine since they're about to land in a chat or on their product.
+  const cookieStore = await cookies();
+  const connectCode = cookieStore.get(CONNECT_COOKIE)?.value;
   if (connectCode && CONNECT_CODE.test(connectCode)) redirect(`/c/${connectCode}`);
+  const claimCode = cookieStore.get(CLAIM_COOKIE)?.value;
+  if (claimCode && CLAIM_CODE.test(claimCode)) redirect(`/claim/${claimCode}`);
   redirect("/welcome"); // first save: show the short how-it-works screen once
 }
 
@@ -273,14 +277,20 @@ export async function createProduct(formData) {
 export async function updateProduct(productId, formData) {
   const { user } = await requireProfile();
   const product = await data.getProductWithOwner(productId);
-  if (product?.owner_id !== user.id) throw new Error("You can only edit your own products.");
+  // Unclaimed products (claim links) have no owner yet, so only an admin can edit them.
+  const unclaimed = product && !product.owner_id;
+  if (unclaimed ? !isAdmin(user) : product?.owner_id !== user.id) throw new Error("You can only edit your own products.");
 
-  await data.updateProduct(productId, user.id, {
+  await data.updateProduct(productId, unclaimed ? null : user.id, {
     ...productFields(formData),
     ...(await productImages(formData, productId)),
   });
   revalidatePath("/products");
   revalidatePath(`/products/${productId}`);
+  if (unclaimed) {
+    revalidatePath(`/claim/${product.claim_code}`);
+    redirect(`/claim/${product.claim_code}`);
+  }
   redirect(`/products/${productId}`);
 }
 
@@ -398,6 +408,49 @@ export async function resetConnectCode() {
   await logAction("connect link reset", { event: "connect_link_reset" });
   await flushPostHogLogs();
   revalidatePath("/profile");
+}
+
+// --- Claim links (/claim/<code>, see lib/claim.js) ---
+
+// Admin prefills a product for a builder. It has no owner, so no deck shows it until they claim it.
+export async function createUnclaimedProduct(formData) {
+  await requireAdmin();
+  const id = crypto.randomUUID();
+  const claimCode = newClaimCode();
+  await data.createProduct({
+    id,
+    owner_id: null,
+    claim_code: claimCode,
+    ...productFields(formData),
+    ...(await productImages(formData, id)),
+  });
+  await logAction("unclaimed product created", { event: "unclaimed_product_created", product_id: id });
+  await flushPostHogLogs();
+  revalidatePath("/admin");
+  redirect(`/claim/${claimCode}`); // the admin preview there has the link to copy
+}
+
+// Not signed up yet: remember the link for a day, then send them through login and onboarding.
+// /auth/callback and saveProfile send them back to /claim/<code> afterwards.
+export async function startClaim(code) {
+  if (!CLAIM_CODE.test(code)) redirect("/login");
+  (await cookies()).set(CLAIM_COOKIE, code, { maxAge: 60 * 60 * 24, httpOnly: true, sameSite: "lax", path: "/" });
+  redirect((await getUser()) ? "/onboarding" : "/login");
+}
+
+// Tapping Claim on /claim/<code>. Returns { error } or { ok, productId }; the button then opens the edit
+// page. It goes live in the deck right away: claiming is the builder saying yes.
+export async function claimProduct(code) {
+  const { user } = await requireProfile();
+  (await cookies()).delete(CLAIM_COOKIE);
+  const productId = CLAIM_CODE.test(code) ? await data.claimProduct(code, user.id) : null;
+  if (!productId) return { error: "Someone already claimed this one, or the link changed. Ask whoever sent it to you." };
+
+  await logAction("product claimed", { event: "product_claimed", product_id: productId });
+  await flushPostHogLogs();
+  revalidatePath("/products");
+  revalidatePath("/admin");
+  return { ok: true, productId };
 }
 
 export async function setProductHidden(productId, hidden) {

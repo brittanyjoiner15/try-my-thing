@@ -11,6 +11,7 @@ export default async function ProductPage({ params }) {
   const product = await getProductWithOwner(id);
   const isOwner = product?.owner_id === user.id;
   if (!product || (product.hidden && !isOwner && !isAdmin(user))) notFound();
+  if (!product.owner_id) notFound(); // unclaimed: its page is /claim/<code>
 
   // Only pass what the card shows. The owner record includes their email.
   const { owner, ...rest } = product;

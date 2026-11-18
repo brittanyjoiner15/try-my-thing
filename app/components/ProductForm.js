@@ -6,12 +6,13 @@ import ImageInput from "./ImageInput";
 import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX } from "@/lib/product-options";
 import SubmitButton from "@/app/components/SubmitButton";
 
-export default function ProductForm({ action, product, title, intro, submitLabel }) {
+// `event` overrides the PostHog event, e.g. for admin claim links, so they don't count as real builder posts.
+export default function ProductForm({ action, product, title, intro, submitLabel, event }) {
   return (
     <form
       action={action}
       className="panel space-y-6"
-      onSubmit={() => posthog.capture(product ? "product_updated" : "product_created")}
+      onSubmit={() => posthog.capture(event ?? (product ? "product_updated" : "product_created"))}
     >
       <div>
         <h2 className="text-2xl font-bold">{title}</h2>

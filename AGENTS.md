@@ -24,6 +24,7 @@ Tinder for trying software. Read `README.md` first for routes and the privacy mo
 - All data access goes through `lib/data/index.js`. Every new function needs a version in both `mock.js` (demo mode) and `supabase.js`, plus a `route("name")` line in `index.js`.
 - Demo is decided per request: `isDemo()` in `lib/demo.js` is true with no Supabase keys, or when the `/demo` cookie is set on the real site. Don't use `DEMO_ENV` for that check; it only covers the no-keys case. Anything with real-world side effects (emails, Supabase auth) must skip demo visitors.
 - Prompt and platform lists: `lib/product-options.js`. Profile lists (roles, problem spaces, looking for): `lib/profile-options.js`. Pre-written first chat message: `lib/intro.js`.
+- Claim links (`lib/claim.js`): admins prefill a product at `/admin/claim/new` and send the builder `/claim/<code>`. Until it's claimed the product has `owner_id` null and stays out of every deck, so code that reads `product.owner` must handle unclaimed products. Whoever taps Claim first owns it. Funnel events: `claim_link_viewed` → `product_claimed`.
 - `featured` products sort first in every deck. Set it by hand in SQL; there's no UI. The PostHog example product is featured and owned by Britt's personal account.
 - Images: public `product-images` storage bucket, uploaded only by server code with the secret key. No SVG. Profile photos live in the same bucket under `avatars/<user id>/`.
 
@@ -44,7 +45,7 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 ### Database migrations
 - Migrations are applied **by hand** and aren't in Supabase's migration history. Never run `supabase db push`, because it would re-run the init migration.
 - Apply with `supabase db query --linked --project-ref kwuossjlcjpzmhmlzhuu -f <file>`. Run this from a scratch folder that holds a copy of `supabase/migrations/`: inside the repo, the CLI fails with "failed to parse environment file: .env.local".
-- Applied so far: `20261103000000_init`, `20261104000000_product_profiles`, `20261104010000_featured_products`, `20261105000000_builder_matching`, `20261105010000_profile_photos`, `20261106000000_chat`, `20261107000000_github_profiles`, `20261107010000_featured_repos`, `20261109000000_connect_codes`.
+- Applied so far: `20261103000000_init`, `20261104000000_product_profiles`, `20261104010000_featured_products`, `20261105000000_builder_matching`, `20261105010000_profile_photos`, `20261106000000_chat`, `20261107000000_github_profiles`, `20261107010000_featured_repos`, `20261109000000_connect_codes`. Not applied yet: `20261118000000_claim_links`.
 
 ### Testing
 - Don't run `pnpm install` while the dev server is running. Turbopack keeps the old module paths, and the page gets stuck in a full-reload loop. If that happens, Britt restarts the server with `rm -rf .next && pnpm dev`.
