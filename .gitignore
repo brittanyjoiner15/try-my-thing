@@ -44,3 +44,6 @@ next-env.d.ts
 # supabase cli (machine-specific link state)
 supabase/.temp/
 .env.local
+
+# Local Netlify folder
+.netlify

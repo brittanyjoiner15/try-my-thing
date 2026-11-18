@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import posthog from "posthog-js";
 import { sendMessage, pollChat } from "@/app/actions";
 import RespondButtons from "../RespondButtons";
@@ -12,6 +12,15 @@ const MESSAGE_MAX = 2000; // same limit as app/actions.js
 const FAILS_BEFORE_RELOAD = 3;
 
 const time = (iso) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+// Times are formatted in the viewer's timezone, which the server (UTC on Netlify) doesn't know. Rendering them
+// on the server too gave a different string than the browser and a React hydration error (418), so the server
+// and the first browser render show a blank, and the real time fills in right after.
+const noSubscribe = () => () => {};
+function MessageTime({ iso }) {
+  const onClient = useSyncExternalStore(noSubscribe, () => true, () => false);
+  return <span className="mt-0.5 text-[11px] text-muted">{onClient ? time(iso) : "\u00a0"}</span>;
+}
 
 export default function ChatThread({ chatId, meId, themName, initialMessages, initialStatus, initialRequests, draft }) {
   const [messages, setMessages] = useState(initialMessages);
@@ -174,7 +183,7 @@ function TextMessage({ message, mine }) {
       >
         {message.body}
       </p>
-      <span className="mt-0.5 text-[11px] text-muted">{time(message.created_at)}</span>
+      <MessageTime iso={message.created_at} />
     </li>
   );
 }
@@ -202,7 +211,7 @@ function RequestLine({ message, request, meId, first }) {
         {request.status === "accepted" && <p className="text-xs text-muted">Accepted</p>}
         {request.status === "declined" && <p className="text-xs text-muted">{iOwn ? "You passed" : "Not taking testers right now"}</p>}
       </div>
-      <span className="mt-0.5 text-[11px] text-muted">{time(message.created_at)}</span>
+      <MessageTime iso={message.created_at} />
     </li>
   );
 }
