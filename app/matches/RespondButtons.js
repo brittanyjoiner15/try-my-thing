@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from "react";
 import posthog from "posthog-js";
-import { respondToTester } from "@/app/actions";
+import { respondToRequest } from "@/app/actions";
 import { Spinner } from "@/app/components/SubmitButton";
 
-// Accept / Pass on a tester's request. Used on the Matches page and at the top of a pending chat.
-export default function RespondButtons({ chatId }) {
+// Accept / Pass on one product request. Used on the Matches page and on the request line inside a chat.
+export default function RespondButtons({ requestId }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
 
@@ -14,17 +14,17 @@ export default function RespondButtons({ chatId }) {
     startTransition(async () => {
       let result;
       try {
-        result = await respondToTester(chatId, accept);
+        result = await respondToRequest(requestId, accept);
       } catch (err) {
-        posthog.captureException(err, { feature: "chat", action: "respondToTester", chat_id: chatId });
+        posthog.captureException(err, { feature: "chat", action: "respondToRequest", request_id: requestId });
         return setError("Couldn't save that. Try again.");
       }
       if (result?.error) return setError(result.error);
-      posthog.capture("tester_request_answered", { chat_id: chatId, accepted: accept, ...result.stats });
+      posthog.capture("tester_request_answered", { accepted: accept, ...result.stats });
     });
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center justify-center gap-2">
       <button className="btn-primary text-sm" disabled={pending} onClick={() => respond(true)}>
         Accept
       </button>

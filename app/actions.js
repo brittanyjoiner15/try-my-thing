@@ -301,8 +301,9 @@ export async function toggleMyProduct(productId, hidden) {
   revalidatePath("/products");
 }
 
-// Returns { error } or { ok, match }. A right swipe opens a pending chat that the builder has to
-// accept, and both sides get an email (sent after the response).
+// Returns { error } or { ok, match }. A right swipe adds a product request to the pair's chat.
+// New chat: it starts pending and the builder has to accept. Chat already open (builder match, or an
+// earlier accepted request): the request is accepted right away and shows up as a line in the thread.
 export async function swipe(productId, direction) {
   const { user, profile } = await requireProfile();
   if (!["left", "right"].includes(direction)) return { error: "Bad swipe." };
@@ -328,18 +329,28 @@ export async function swipe(productId, direction) {
   revalidatePath("/matches");
   if (direction === "left") return { ok: true };
 
-  // The chat starts pending: the tester can't message until the builder accepts.
-  const chat = await data.createChat({ user_a: user.id, user_b: product.owner_id, product_id: productId, status: "pending" });
+  const chat = await data.createChat({ user_a: user.id, user_b: product.owner_id, status: "pending" });
+  const accepted = chat.status === "open";
+  const request = await data.createProductRequest({
+    chat_id: chat.id,
+    tester_id: user.id,
+    product_id: productId,
+    status: accepted ? "accepted" : "pending",
+  });
+  if (request.duplicate) return { error: "You already asked to try this one." };
+  if (chat.status === "declined") await data.setChatStatus(chat.id, "pending"); // a new ask, so it's waiting again
+  await data.insertMessage({ chat_id: chat.id, sender_id: user.id, kind: "request", request_id: request.id, body: `wants to try ${product.name}` });
+
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
-  await emailAfterResponse(() => sendProductMatchEmails({ product, builder: product.owner, tester: profile, chatUrl }));
-  return { ok: true, match: { product: product.name, builderName: product.owner.name, chatId: chat.id } };
+  await emailAfterResponse(() => sendProductMatchEmails({ product, builder: product.owner, tester: profile, chatUrl, alreadyChatting: accepted }));
+  return { ok: true, match: { product: product.name, builderName: product.owner.name, chatId: chat.id, accepted } };
 }
 
-// One-click opt-in from the Builders tab, for people who filled in builder fields but missed the checkbox.
+// One-click opt-in from the card in the swipe deck, for people who filled in builder fields but missed the checkbox.
 export async function enableBuilderMatching() {
   const { profile } = await requireProfile();
   await data.saveProfile({ ...profile, open_to_builders: true });
-  redirect("/swipe?mode=builders");
+  redirect("/swipe");
 }
 
 // Builder ↔ builder swipe. Returns { error } or { ok, match }. It's only a match when the other
@@ -356,9 +367,9 @@ export async function swipeBuilder(builderId, direction) {
   if (duplicate) return { error: "You already swiped on this builder." };
   if (direction === "left" || !(await data.hasRightLike(builderId, user.id))) return { ok: true };
 
-  // user_a is the lower id, so both people's swipes find the same chat.
-  const [user_a, user_b] = [user.id, builderId].sort();
-  const chat = await data.createChat({ user_a, user_b, status: "open" });
+  // The pair may already have a chat from a product request. A builder match opens it.
+  const chat = await data.createChat({ user_a: user.id, user_b: builderId, status: "open" });
+  if (chat.status !== "open") await data.setChatStatus(chat.id, "open");
   revalidatePath("/matches");
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
   await emailAfterResponse(() => sendBuilderMatchEmails({ a: profile, b: other, chatUrl }));
@@ -383,18 +394,19 @@ export async function connectInPerson(code) {
   if (!other) return { error: "This link doesn't work anymore. Ask them to show you their QR code again." };
   if (other.id === user.id) return { error: "That's your own link. Show it to someone else to connect." };
 
-  // Count it as a mutual right swipe, so they drop out of each other's Builders deck.
+  // Count it as a mutual right swipe, so they drop out of each other's swipe deck.
   // An earlier swipe either way already has a row, and the duplicate is ignored.
   await data.insertBuilderLike({ from_id: user.id, to_id: other.id, direction: "right" });
   await data.insertBuilderLike({ from_id: other.id, to_id: user.id, direction: "right" });
-  // Same chat as a builder match: user_a is the lower id, so both ways find the same row.
-  const [user_a, user_b] = [user.id, other.id].sort();
-  const chat = await data.createChat({ user_a, user_b, status: "open" });
+  // Same chat as everything else between these two. Connecting opens it.
+  const chat = await data.createChat({ user_a: user.id, user_b: other.id, status: "open" });
+  const alreadyOpen = !chat.created && chat.status === "open";
+  if (!alreadyOpen && !chat.created) await data.setChatStatus(chat.id, "open");
   revalidatePath("/matches");
 
-  await logAction("in person connect", { event: "in_person_connect", already_matched: !chat.created });
+  await logAction("in person connect", { event: "in_person_connect", already_matched: alreadyOpen });
   await flushPostHogLogs();
-  if (chat.created) {
+  if (!alreadyOpen) {
     const chatUrl = `${await appUrl()}/matches/${chat.id}`;
     await emailAfterResponse(() => sendInPersonConnectEmail({ to: other, from: profile, chatUrl }));
   }
@@ -463,39 +475,47 @@ export async function setProductHidden(productId, hidden) {
 
 const hoursSince = (iso) => Math.round(((Date.now() - new Date(iso)) / 36e5) * 10) / 10; // one decimal
 
-// The builder accepts (opens the chat) or declines a tester's request.
-export async function respondToTester(chatId, accept) {
+// The builder accepts or passes on one product request. Accepting opens the chat. Passing closes it
+// only when nothing else keeps it open (another request, or a builder match).
+export async function respondToRequest(requestId, accept) {
   const { user, profile } = await requireProfile();
-  const chat = await data.getChat(chatId, user.id);
-  if (!chat?.product || chat.product.owner_id !== user.id || chat.status !== "pending") return { error: "That request isn't waiting on you." };
+  const request = await data.getProductRequest(requestId);
+  if (!request || request.product.owner_id !== user.id || request.status !== "pending") return { error: "That request isn't waiting on you." };
+  const chat = await data.getChat(request.chat_id, user.id);
 
-  await data.setChatStatus(chatId, accept ? "open" : "declined");
-  const hoursWaiting = hoursSince(chat.created_at);
+  await data.setProductRequestStatus(requestId, accept ? "accepted" : "declined");
+  if (accept && chat.status !== "open") await data.setChatStatus(chat.id, "open");
+  if (!accept && chat.status === "pending" && !chat.requests.some((r) => r.id !== requestId && r.status !== "declined")) {
+    await data.setChatStatus(chat.id, "declined");
+  }
+
+  const hoursWaiting = hoursSince(request.created_at);
   await logAction("tester request answered", {
     event: "tester_request_answered",
     accepted: accept,
-    chat_id: chatId,
-    product_id: chat.product.id,
+    chat_id: chat.id,
+    request_id: requestId,
+    product_id: request.product.id,
     hours_waiting: hoursWaiting,
   });
   await flushPostHogLogs();
   if (accept) {
-    const [tester, chatUrl] = [await data.getProfile(chat.user_a), `${await appUrl()}/matches/${chatId}`];
-    await emailAfterResponse(() => sendChatAcceptedEmail({ product: chat.product, builder: profile, tester, chatUrl }));
+    const [tester, chatUrl] = [await data.getProfile(request.tester_id), `${await appUrl()}/matches/${chat.id}`];
+    await emailAfterResponse(() => sendChatAcceptedEmail({ product: request.product, builder: profile, tester, chatUrl }));
   }
   revalidatePath("/matches");
-  revalidatePath(`/matches/${chatId}`);
-  return { ok: true, stats: { product_id: chat.product.id, hours_waiting: hoursWaiting } };
+  revalidatePath(`/matches/${chat.id}`);
+  return { ok: true, stats: { chat_id: chat.id, request_id: requestId, product_id: request.product.id, hours_waiting: hoursWaiting } };
 }
 
 // What every message analytics event carries, so PostHog can answer: how many matches start a chat,
 // how many get a reply, who goes first, and how long after matching. Read before the insert updates the chat.
+// Chats are per pair now, so there's no chat_type: product_request_count > 0 means a product brought them together.
 function messageStats(chat, userId) {
   return {
     chat_id: chat.id,
-    chat_type: chat.product ? "product" : "builder",
-    sender_side: !chat.product ? "builder_match" : chat.product.owner_id === userId ? "builder" : "tester",
-    is_first_message: !chat.last_message_at, // this message starts the conversation
+    product_request_count: chat.requests.length,
+    is_first_message: !chat.last_message_at, // this message starts the conversation (request lines don't count)
     is_reply: Boolean(chat.last_sender_id) && chat.last_sender_id !== userId, // answering the other person
     hours_since_match: hoursSince(chat.created_at),
   };
@@ -538,12 +558,13 @@ export async function sendMessage(chatId, text) {
   return { message, stats };
 }
 
-// Called every few seconds by the open chat page. Returns messages newer than sinceIso and marks the chat read.
+// Called every few seconds by the open chat page. Returns messages newer than sinceIso, the chat status,
+// and every product request (so request cards pick up an accept or pass), and marks the chat read.
 export async function pollChat(chatId, sinceIso) {
   const { user } = await requireProfile();
   const chat = await data.getChat(chatId, user.id);
   if (!chat) return { error: "That chat doesn't exist." };
   const messages = await data.getMessages(chatId, sinceIso);
   if (messages.some((m) => m.sender_id !== user.id)) await data.touchChat(chatId, chat.me, "read");
-  return { messages, status: chat.status };
+  return { messages, status: chat.status, requests: chat.requests };
 }

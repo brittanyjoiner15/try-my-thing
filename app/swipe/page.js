@@ -1,75 +1,42 @@
-import Link from "next/link";
+import { cookies } from "next/headers";
 import { requireProfile } from "@/lib/session";
 import { getDeck, getBuilderCandidates } from "@/lib/data";
 import { rankBuilders } from "@/lib/builder-match";
-import { enableBuilderMatching } from "@/app/actions";
 import SwipeDeck from "./SwipeDeck";
-import SubmitButton from "@/app/components/SubmitButton";
+import { OPT_IN_DISMISSED } from "./optin";
 
-// /swipe = products deck, /swipe?mode=builders = other builders deck.
-export default async function SwipePage({ searchParams }) {
+const BUILDERS_EVERY = 3; // 2 products, then 1 builder
+const OPT_IN_AT = 3; // where the "meet builders too?" card goes for people who haven't opted in
+
+// One deck with products and builders mixed: featured products first, then 2 products for every builder,
+// each in its own ranking order. Builders only show to people who opted in themselves, so it stays two-way.
+// Everyone else gets one card in the deck that offers to turn it on, until they skip it.
+export default async function SwipePage() {
   const { user, profile } = await requireProfile();
-  const builders = (await searchParams).mode === "builders";
+  const products = (await getDeck(user.id)).map((p) => ({ ...p, type: "product" }));
+  const builders = profile.open_to_builders
+    ? rankBuilders(profile, await getBuilderCandidates(user.id)).map((b) => ({ ...b, type: "builder" }))
+    : [];
 
-  let deck;
-  if (!builders) deck = <SwipeDeck key="products" kind="products" initialCards={await getDeck(user.id)} />;
-  else if (!profile.open_to_builders) deck = <OptIn profile={profile} />;
-  else deck = <SwipeDeck key="builders" kind="builders" initialCards={rankBuilders(profile, await getBuilderCandidates(user.id))} />;
+  const cards = mix(products, builders);
+  if (!profile.open_to_builders && !(await cookies()).has(OPT_IN_DISMISSED)) {
+    // Builder fields filled in but the checkbox left off: one tap turns it on. Otherwise it links to /profile.
+    const ready = Boolean(profile.building || profile.topics?.length);
+    cards.splice(Math.min(OPT_IN_AT, cards.length), 0, { type: "optin", id: "optin", ready });
+  }
 
-  return (
-    <div>
-      <nav className="mx-auto flex max-w-md rounded-full border border-border bg-card p-1 text-sm font-semibold">
-        <ModeLink href="/swipe" active={!builders}>Products</ModeLink>
-        <ModeLink href="/swipe?mode=builders" active={builders}>Builders</ModeLink>
-      </nav>
-      {deck}
-    </div>
-  );
+  return <SwipeDeck initialCards={cards} />;
 }
 
-function ModeLink({ href, active, children }) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={`flex-1 rounded-full py-1.5 text-center ${active ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}
-    >
-      {children}
-    </Link>
-  );
-}
-
-// Builders only see other builders after opting in themselves, so the deck is always two-way.
-function OptIn({ profile }) {
-  // Already filled in the builder fields but left the checkbox off: offer a one-click turn-on.
-  const ready = Boolean(profile.building || profile.topics?.length);
-  return (
-    <div className="panel mx-auto mt-8 max-w-md text-center">
-      <h1 className="text-2xl font-bold">Meet builders like you</h1>
-      {ready ? (
-        <>
-          <p className="mt-2 text-muted">
-            Your builder profile is ready, but you&apos;re hidden from other builders. Turn it on to start swiping. You only
-            see each other&apos;s email if you both swipe right.
-          </p>
-          <form action={enableBuilderMatching}>
-            <SubmitButton className="btn-primary mt-4">Show me to other builders</SubmitButton>
-          </form>
-          <Link href="/profile" className="mt-3 block text-sm text-muted underline">
-            Edit my profile first
-          </Link>
-        </>
-      ) : (
-        <>
-          <p className="mt-2 text-muted">
-            Find builders near you, working on similar problems, or using the same stack. Add a few details and turn on
-            &quot;Show me to other builders&quot; to start swiping.
-          </p>
-          <Link href="/profile" className="btn-primary mt-4">
-            Set up my builder profile
-          </Link>
-        </>
-      )}
-    </div>
-  );
+function mix(products, builders) {
+  const out = products.filter((p) => p.featured);
+  const rest = products.filter((p) => !p.featured);
+  let [p, b] = [0, 0];
+  while (p < rest.length || b < builders.length) {
+    // Builders fill in once products run out, and the other way round.
+    const builderTurn = (out.length + 1) % BUILDERS_EVERY === 0;
+    if ((builderTurn && b < builders.length) || p >= rest.length) out.push(builders[b++]);
+    else out.push(rest[p++]);
+  }
+  return out;
 }

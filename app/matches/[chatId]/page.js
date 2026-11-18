@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import { requireProfile } from "@/lib/session";
 import { getChat, getMessages, touchChat } from "@/lib/data";
 import { testerIntro, builderIntro } from "@/lib/intro";
+import { pairSummary } from "@/lib/chat-summary";
 import Avatar from "@/app/components/Avatar";
 import ChatThread from "./ChatThread";
-import RespondButtons from "../RespondButtons";
 
+// One chat per pair of people. Product requests show as lines in the thread, with Accept / Pass for the builder.
 export default async function ChatPage({ params }) {
   const { chatId } = await params;
   const { user, profile } = await requireProfile();
@@ -16,10 +17,11 @@ export default async function ChatPage({ params }) {
   const messages = await getMessages(chatId);
   await touchChat(chatId, chat.me, "read");
 
-  const { them, product } = chat;
-  const iAmBuilder = product?.owner_id === user.id;
-  // Pre-write the first message for whoever usually starts: the tester, or either builder.
-  const draft = messages.length > 0 || iAmBuilder ? "" : product ? testerIntro({ product, tester: profile }) : builderIntro({ me: profile });
+  // Pre-write the first message for whoever usually starts: a tester (about the first product they asked for),
+  // or either person when there's no product in the picture. A builder answering a request writes their own.
+  const typed = messages.some((m) => m.kind === "text");
+  const myRequest = chat.requests.find((r) => r.tester_id === user.id && r.status !== "declined");
+  const draft = typed ? "" : myRequest ? testerIntro({ product: myRequest.product, tester: profile }) : chat.requests.length ? "" : builderIntro({ me: profile });
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -27,41 +29,23 @@ export default async function ChatPage({ params }) {
         ← Matches
       </Link>
       <header className="flex items-center gap-3">
-        <Avatar name={them.name} url={them.avatar_url} />
+        <Avatar name={chat.them.name} url={chat.them.avatar_url} />
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold">{them.name}</h1>
-          <p className="truncate text-sm text-muted">
-            {product ? (iAmBuilder ? `wants to try ${product.name}` : `built ${product.name}`) : `${them.role} · builder match`}
-          </p>
+          <h1 className="truncate text-xl font-bold">{chat.them.name}</h1>
+          <p className="truncate text-sm text-muted">{pairSummary(chat, user.id)}</p>
         </div>
-        {product && (
-          <a href={product.url} target="_blank" rel="noreferrer" className="ml-auto shrink-0 text-xs font-semibold text-accent underline">
-            {product.name} ↗
-          </a>
-        )}
       </header>
 
-      {chat.status === "pending" && iAmBuilder && (
-        <div className="panel space-y-3 text-center">
-          <p>
-            {them.name.split(" ")[0]} is {/^[aeiou]/i.test(them.role) ? "an" : "a"} {them.role} using {them.stack}. Accept to start chatting.
-          </p>
-          <div className="flex justify-center">
-            <RespondButtons chatId={chatId} />
-          </div>
-        </div>
-      )}
-
-      {/* key: remount when the builder accepts, so the message box shows without waiting for a poll. */}
+      {/* key: remount when the chat opens or a request is answered, so the message box and request lines
+          update without waiting for a poll. */}
       <ChatThread
-        key={chat.status}
+        key={`${chat.status}-${chat.requests.map((r) => r.status).join()}`}
         chatId={chatId}
-        chatType={product ? "product" : "builder"}
         meId={user.id}
-        themName={them.name}
+        themName={chat.them.name}
         initialMessages={messages}
         initialStatus={chat.status}
-        iAmBuilder={iAmBuilder}
+        initialRequests={chat.requests}
         draft={draft}
       />
     </div>
