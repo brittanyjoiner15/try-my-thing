@@ -63,17 +63,16 @@ export default async function MatchesPage() {
   );
 }
 
-// One person. "Message" shows once the chat is open (an accepted request, a builder match, or an in-person connect).
+// One person. "Open chat" shows once the chat is open (an accepted request, a builder match, or an in-person connect).
 function ChatRow({ chat, meId, children }) {
   const { them } = chat;
   return (
-    <div className="panel flex flex-wrap items-center justify-between gap-4 py-4">
+    <div className={`panel flex flex-wrap items-center justify-between gap-4 py-4 ${chat.unread ? "ring-2 ring-accent" : ""}`}>
       <div className="flex min-w-0 items-start gap-3">
         <Avatar name={them.name} url={them.avatar_url} />
         <div className="min-w-0">
           <p className="font-bold">
             {them.name}
-            {chat.unread && <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-white">New</span>}
           </p>
           <p className="text-sm text-muted">
             {pairSummary(chat, meId)} · {chat.last_message_at ? `last message ${day(chat.last_message_at)}` : `matched ${day(chat.created_at)}`}
@@ -98,8 +97,12 @@ function ChatRow({ chat, meId, children }) {
         {chat.status === "pending" && chat.waitingOnMe.length === 0 && <span className="text-sm text-muted">Waiting to accept</span>}
         {chat.status === "declined" && <span className="text-sm text-muted">Not taking testers</span>}
         {chat.status === "open" && (
-          <Link href={`/matches/${chat.id}`} className="btn-primary text-sm">
-            Message
+          // "Open chat", not "Message": it's where you read the conversation too, not only where you start one.
+          <Link href={`/matches/${chat.id}`} className="btn-primary relative text-sm">
+            {chat.unread ? "Read new message" : "Open chat"}
+            {chat.unread && (
+              <span className="absolute -top-2 -right-2 rounded-full bg-foreground px-1.5 text-[10px] leading-4 font-bold text-card">New</span>
+            )}
           </Link>
         )}
       </div>
