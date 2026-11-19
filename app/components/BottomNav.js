@@ -29,7 +29,7 @@ function Icon({ name }) {
 
 const tab = "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-semibold";
 
-export default function BottomNav({ showAdmin, userId, userEmail, unread = 0, demo = false }) {
+export default function BottomNav({ showAdmin, userId, userEmail, unread = 0 }) {
   const pathname = usePathname();
   const previousUserId = useRef(null);
   const liveUnread = useUnreadCount(unread);
@@ -39,20 +39,15 @@ export default function BottomNav({ showAdmin, userId, userEmail, unread = 0, de
       posthog.reset();
     }
 
-    // Every /demo visitor is the same fake user, so identifying them would merge them all into one
-    // person. Tag their events with is_demo instead and leave them anonymous.
-    if (demo) {
-      posthog.register({ is_demo: true });
-    } else {
-      posthog.unregister("is_demo");
-      posthog.identify(userId, { email: userEmail });
-    }
+    // TODO: remove once old /demo visitors are gone. Clears the is_demo super property they kept in this browser.
+    posthog.unregister("is_demo");
+    posthog.identify(userId, { email: userEmail });
     previousUserId.current = userId;
-  }, [demo, userEmail, userId]);
+  }, [userEmail, userId]);
 
   useEffect(() => {
     const resetOnSignOut = (event) => {
-      if (event.target.closest("[data-posthog-sign-out], [data-posthog-exit-demo]")) {
+      if (event.target.closest("[data-posthog-sign-out]")) {
         posthog.reset();
       }
     };

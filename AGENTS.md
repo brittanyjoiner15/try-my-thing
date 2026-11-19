@@ -17,12 +17,12 @@ Tinder for trying software. Read `README.md` first for routes and the privacy mo
 - **Domain:** `trymything.app`, registered and DNS on Cloudflare. Not wired to Netlify or set as the Supabase Site URL yet.
 - **Supabase:** project `try-my-thing`, ref `kwuossjlcjpzmhmlzhuu`.
 - **Email:** Supabase Auth sends magic links through Resend SMTP (match emails moved to PostHog, see below) (`smtp.resend.com:465`, user `resend`). Resend is verified on the **root** domain, so the sender must be `@trymything.app` (not `@mail.trymything.app`).
-- **Match emails:** `lib/match-emails.js` emails both people on a match (tester and builder, or two builders), the tester when a builder accepts, and the other person on a new chat message, as **PostHog transactional emails** sent from `after()` so swipes don't wait on it. Copy and design live in PostHog (Workflows → Transactional, 6 templates tagged `try-my-thing`, sender `hello@mail.trymything.app`); the code passes a template ID and `{{ variables.* }}`, so renaming a variable means changing both. Edit wording in PostHog and publish, no deploy needed. Needs `POSTHOG_SECRET_KEY` (project secret API key, Transactional email: Write). Without it nothing is sent; demo mode prints the emails to the server console. Open/click events are on and land on the recipient's person. The new-message template has Protect sensitive data on. No email has a Reply-To and none shows the other person's address: people never see each other's emails.
+- **Match emails:** `lib/match-emails.js` emails both people on a match (tester and builder, or two builders), the tester when a builder accepts, and the other person on a new chat message, as **PostHog transactional emails** sent from `after()` so swipes don't wait on it. Copy and design live in PostHog (Workflows → Transactional, 6 templates tagged `try-my-thing`, sender `hello@mail.trymything.app`); the code passes a template ID and `{{ variables.* }}`, so renaming a variable means changing both. Edit wording in PostHog and publish, no deploy needed. Needs `POSTHOG_SECRET_KEY` (project secret API key, Transactional email: Write). Without it nothing is sent and the server logs a warning. Open/click events are on and land on the recipient's person. The new-message template has Protect sensitive data on. No email has a Reply-To and none shows the other person's address: people never see each other's emails.
 - **PostHog:** US cloud. Env vars are `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST`, set in `.env.local` and Netlify (renamed from `NEXT_PUBLIC_POSTHOG_KEY` on 2026-11-04). Session replay is off for this app's project.
 
 ### Working on the code
-- All data access goes through `lib/data/index.js`. Every new function needs a version in both `mock.js` (demo mode) and `supabase.js`, plus a `route("name")` line in `index.js`.
-- Demo is decided per request: `isDemo()` in `lib/demo.js` is true with no Supabase keys, or when the `/demo` cookie is set on the real site. Don't use `DEMO_ENV` for that check; it only covers the no-keys case. Anything with real-world side effects (emails, Supabase auth) must skip demo visitors.
+- All data access goes through `lib/data/index.js`. New functions go in `supabase.js`, plus a name in the export list in `index.js`.
+- There is no demo mode (removed 2026-11-19). The app always runs on real Supabase data; old `/demo` links redirect to `/`.
 - Prompt and platform lists: `lib/product-options.js`. Profile lists (roles, problem spaces, looking for): `lib/profile-options.js`. Pre-written first chat message: `lib/intro.js`.
 - Claim links (`lib/claim.js`): admins prefill a product at `/admin/claim/new` and send the builder `/claim/<code>`. Until it's claimed the product has `owner_id` null and stays out of every deck, so code that reads `product.owner` must handle unclaimed products. Whoever taps Claim first owns it. Funnel events: `claim_link_viewed` → `product_claimed`.
 - `featured` products sort first in every deck. Set it by hand in SQL; there's no UI. The PostHog example product is featured and owned by Britt's personal account.
@@ -30,7 +30,7 @@ Tinder for trying software. Read `README.md` first for routes and the privacy mo
 
 ### PostHog (analytics, errors, logs)
 Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-wizard-review.md`.
-- Browser setup: `instrumentation-client.js`. It throws in dev if either PostHog env var is missing. Britt chose this, so demo mode also needs the keys.
+- Browser setup: `instrumentation-client.js`. It throws in dev if either PostHog env var is missing. Britt chose this.
 - Browser events are captured in `SwipeDeck.js`, `ProfileForm.js`, `ProductForm.js` and `login/page.js` (snake_case names). `BottomNav.js` calls `identify` (user ID + email) and `reset()` on sign-out.
 - Server logs go to PostHog **Logs** (not analytics events) through OpenTelemetry: `instrumentation.js` and `lib/posthog-logs.js`, called from `app/actions.js`.
 - Server errors go to PostHog **Error tracking** through `posthog-node`: `onRequestError` in `instrumentation.js`, plus `captureServerError` from `lib/posthog-server.js` for work in `after()` (emails). A Resend 429 is tagged `limit: "resend"`.
@@ -50,7 +50,6 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 ### Testing
 - Don't run `pnpm install` while the dev server is running. Turbopack keeps the old module paths, and the page gets stuck in a full-reload loop. If that happens, Britt restarts the server with `rm -rf .next && pnpm dev`.
 - Britt usually has a dev server running against real Supabase. Don't kill it. `next dev` refuses to start a second server in the same folder.
-- To test in demo mode, rsync the repo (without `node_modules`, `.next`, `.env.local`, or `.git`) to a scratch folder, run `pnpm install --offline`, and start it on another port. Demo mode is on when `NEXT_PUBLIC_SUPABASE_URL` is unset. Keep the PostHog env vars set, or the app throws in dev.
 - To drive a browser, use `playwright-core` with the installed Chrome (`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`).
 
 ### Open follow-ups
