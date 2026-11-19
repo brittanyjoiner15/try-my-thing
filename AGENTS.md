@@ -32,6 +32,7 @@ Tinder for trying software. Read `README.md` first for routes and the privacy mo
 Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-wizard-review.md`.
 - Browser setup: `instrumentation-client.js`. It throws in dev if either PostHog env var is missing. Britt chose this.
 - Browser events are captured in `SwipeDeck.js`, `ProfileForm.js`, `ProductForm.js` and `login/page.js` (snake_case names). `BottomNav.js` calls `identify` (user ID + email) and `reset()` on sign-out.
+- Signup attribution: `saveProfile` fires a server-side `user_signed_up` on the first profile save, with `signup_source` (`connect_link` / `claim_link` / `direct`) plus `referrer_id`/`referrer_name` or `product_id`/`product_name`, also `$set_once` on the person. Funnels: `connect_link_viewed` → `user_signed_up` → `in_person_connect`, and `claim_link_viewed` → `user_signed_up` → `product_claimed`.
 - Server logs go to PostHog **Logs** (not analytics events) through OpenTelemetry: `instrumentation.js` and `lib/posthog-logs.js`, called from `app/actions.js`.
 - Server errors go to PostHog **Error tracking** through `posthog-node`: `onRequestError` in `instrumentation.js`, plus `captureServerError` from `lib/posthog-server.js` for work in `after()` (emails). A Resend 429 is tagged `limit: "resend"`.
 - Any new element that shows an email or chat message text needs the `ph-no-capture` class, so it stays out of session replays.

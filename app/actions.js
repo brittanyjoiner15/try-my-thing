@@ -12,7 +12,7 @@ import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TY
 import { ROLES, TOPICS, LOOKING_FOR, TOPICS_MAX, BUILDING_MAX } from "@/lib/profile-options";
 import { geocode } from "@/lib/geocode";
 import { fetchGitHubProfile } from "@/lib/github";
-import { captureServerError } from "@/lib/posthog-server";
+import { captureServerError, captureServerEvent } from "@/lib/posthog-server";
 import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
 import { sendProductMatchEmails, sendBuilderMatchEmails, sendChatAcceptedEmail, sendNewMessageEmail, sendInPersonConnectEmail } from "@/lib/match-emails";
 import { CONNECT_COOKIE, CONNECT_CODE, newConnectCode } from "@/lib/connect";
@@ -178,11 +178,34 @@ export async function saveProfile(formData) {
   // Signed up from someone's in-person link or a claim link: take them back to it. They skip /welcome,
   // which is fine since they're about to land in a chat or on their product.
   const cookieStore = await cookies();
-  const connectCode = cookieStore.get(CONNECT_COOKIE)?.value;
-  if (connectCode && CONNECT_CODE.test(connectCode)) redirect(`/c/${connectCode}`);
-  const claimCode = cookieStore.get(CLAIM_COOKIE)?.value;
-  if (claimCode && CLAIM_CODE.test(claimCode)) redirect(`/claim/${claimCode}`);
+  const connectCode = [cookieStore.get(CONNECT_COOKIE)?.value].find((c) => c && CONNECT_CODE.test(c));
+  const claimCode = [cookieStore.get(CLAIM_COOKIE)?.value].find((c) => c && CLAIM_CODE.test(c));
+  // First save = signup. Tag where they came from, after the response so the redirect doesn't wait.
+  after(() => trackSignup(user.id, { connectCode, claimCode, role: profileRole, hasGitHub: Boolean(github) }));
+  if (connectCode) redirect(`/c/${connectCode}`);
+  if (claimCode) redirect(`/claim/${claimCode}`);
   redirect("/welcome"); // first save: show the short how-it-works screen once
+}
+
+// user_signed_up with how they joined, so PostHog can show which links drive signups.
+// The cookies last a day, so someone who signs up later than that counts as "direct".
+// Connect wins over claim, same as the redirect above. The "Invite someone" button shares the
+// plain homepage, so those signups are "direct" too (TODO: add a ?ref= if we want to count them).
+async function trackSignup(userId, { connectCode, claimCode, role, hasGitHub }) {
+  let attribution = { signup_source: "direct" };
+  if (connectCode) {
+    const referrer = await data.getProfileByConnectCode(connectCode);
+    attribution = { signup_source: "connect_link", referrer_id: referrer?.id ?? null, referrer_name: referrer?.name ?? null };
+  } else if (claimCode) {
+    const product = await data.getProductByClaimCode(claimCode);
+    attribution = { signup_source: "claim_link", product_id: product?.id ?? null, product_name: product?.name ?? null };
+  }
+  await captureServerEvent(userId, "user_signed_up", {
+    ...attribution,
+    role,
+    has_github: hasGitHub,
+    $set_once: attribution, // person properties, so any later event can be broken down by how they joined
+  });
 }
 
 // Only names that are really in their GitHub repo list, max 3.
