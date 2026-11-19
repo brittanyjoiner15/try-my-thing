@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { getAdminData } from "@/lib/data";
-import { setProductHidden } from "@/app/actions";
+import { setProductHidden, deleteProductAsAdmin } from "@/app/actions";
+import DeleteProductButton from "@/app/components/DeleteProductButton";
 import SubmitButton from "@/app/components/SubmitButton";
 
 const day = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -94,9 +95,12 @@ export default async function AdminPage() {
                   {p.owner.name} · <span className="ph-no-capture">{p.owner.email}</span> · {p.matches} matches / {p.views} views
                 </p>
               </div>
-              <form action={setProductHidden.bind(null, p.id, !p.hidden)}>
-                <SubmitButton className="btn-ghost text-sm">{p.hidden ? "Unhide" : "Hide"}</SubmitButton>
-              </form>
+              <div className="flex gap-2">
+                <form action={setProductHidden.bind(null, p.id, !p.hidden)}>
+                  <SubmitButton className="btn-ghost text-sm">{p.hidden ? "Unhide" : "Hide"}</SubmitButton>
+                </form>
+                <DeleteProductButton action={deleteProductAsAdmin.bind(null, p.id)} name={p.name} />
+              </div>
             </div>
           ))}
         </div>

@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { requireProfile, isAdmin } from "@/lib/session";
 import { getProductWithOwner } from "@/lib/data";
-import { updateProduct } from "@/app/actions";
+import { updateProduct, deleteMyProduct, deleteProductAsAdmin } from "@/app/actions";
 import ProductForm from "@/app/components/ProductForm";
+import DeleteProductButton from "@/app/components/DeleteProductButton";
 
 export default async function EditProductPage({ params, searchParams }) {
   const { id } = await params;
@@ -20,13 +21,25 @@ export default async function EditProductPage({ params, searchParams }) {
       : "Changes show up in the swipe deck right away. Leave an image empty to keep the current one.";
 
   return (
-    <ProductForm
-      action={updateProduct.bind(null, id)}
-      product={product}
-      title={claimed ? `${product.name} is yours` : `Edit ${product.name}`}
-      intro={intro}
-      submitLabel="Save changes"
-      event={unclaimed ? "unclaimed_product_updated" : undefined}
-    />
+    <div className="space-y-6">
+      <ProductForm
+        action={updateProduct.bind(null, id)}
+        product={product}
+        title={claimed ? `${product.name} is yours` : `Edit ${product.name}`}
+        intro={intro}
+        submitLabel="Save changes"
+        event={unclaimed ? "unclaimed_product_updated" : undefined}
+      />
+      <section className="panel flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="font-bold">Delete this product</p>
+          <p className="text-sm text-muted">Want it back later? Pause it from My products instead.</p>
+        </div>
+        <DeleteProductButton
+          action={(unclaimed ? deleteProductAsAdmin : deleteMyProduct).bind(null, id)}
+          name={product.name}
+        />
+      </section>
+    </div>
   );
 }

@@ -279,6 +279,18 @@ export async function toggleMyProduct(productId, hidden) {
   revalidatePath("/products");
 }
 
+// Owner deletes their own product for good. Admins use deleteProductAsAdmin.
+export async function deleteMyProduct(productId) {
+  const { user } = await requireProfile();
+  const deleted = await data.deleteProduct(productId, user.id);
+  if (!deleted) throw new Error("You can only delete your own products.");
+  logPostHogAction("product deleted", { event: "product_deleted", product_id: productId, by: "owner" });
+  await flushPostHogLogs();
+  revalidatePath("/products");
+  revalidatePath("/admin");
+  redirect("/products");
+}
+
 // Returns { error } or { ok, match }. A right swipe adds a product request to the pair's chat.
 // New chat: it starts pending and the builder has to accept. Chat already open (builder match, or an
 // earlier accepted request): the request is accepted right away and shows up as a line in the thread.
@@ -447,6 +459,17 @@ export async function setProductHidden(productId, hidden) {
   await requireAdmin();
   await data.setProductHidden(productId, hidden);
   revalidatePath("/admin");
+}
+
+// Any product, including unclaimed claim-link ones.
+export async function deleteProductAsAdmin(productId) {
+  await requireAdmin();
+  await data.deleteProduct(productId);
+  logPostHogAction("product deleted", { event: "product_deleted", product_id: productId, by: "admin" });
+  await flushPostHogLogs();
+  revalidatePath("/admin");
+  revalidatePath("/products");
+  redirect("/admin"); // also used from an unclaimed product's edit page, which no longer exists
 }
 
 // --- Chat ---
