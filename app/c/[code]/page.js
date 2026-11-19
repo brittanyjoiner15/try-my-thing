@@ -5,6 +5,7 @@ import { CONNECT_CODE } from "@/lib/connect";
 import { startConnect } from "@/app/actions";
 import Avatar from "@/app/components/Avatar";
 import ConnectButton from "./ConnectButton";
+import TrackConnectView from "./TrackConnectView";
 import SubmitButton from "@/app/components/SubmitButton";
 
 export const metadata = { title: "Connect on try my thing" };
@@ -29,6 +30,7 @@ export default async function ConnectPage({ params }) {
 
   return (
     <div className="mx-auto max-w-md space-y-4 pt-8">
+      {me?.id !== owner.id && <TrackConnectView ownerId={owner.id} signedIn={Boolean(user)} />}
       {/* Only what a card shows. The owner record includes their email. */}
       <div className="panel flex flex-col items-center text-center">
         <Avatar name={owner.name} url={owner.avatar_url} size="h-24 w-24 text-4xl" />

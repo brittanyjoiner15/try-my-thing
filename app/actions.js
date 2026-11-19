@@ -178,24 +178,43 @@ export async function saveProfile(formData) {
   // Signed up from someone's in-person link or a claim link: take them back to it. They skip /welcome,
   // which is fine since they're about to land in a chat or on their product.
   const cookieStore = await cookies();
-  const connectCode = cookieStore.get(CONNECT_COOKIE)?.value;
-  const claimCode = cookieStore.get(CLAIM_COOKIE)?.value;
-  // First save = they joined. The "New signup" workflow in PostHog emails Britt on this event.
-  const joinedVia = connectCode && CONNECT_CODE.test(connectCode) ? "in_person" : claimCode && CLAIM_CODE.test(claimCode) ? "claim_link" : "direct";
-  after(() =>
-    captureServerEvent(user.id, "user_joined", {
-      name: field(formData, "name"),
-      role: profileRole,
-      stack: field(formData, "stack"),
-      building: field(formData, "building") || null,
-      location: place.location,
-      joined_via: joinedVia,
-      $set: { email: user.email, name: field(formData, "name") },
-    }),
-  );
-  if (joinedVia === "in_person") redirect(`/c/${connectCode}`);
-  if (joinedVia === "claim_link") redirect(`/claim/${claimCode}`);
+  const connectCode = [cookieStore.get(CONNECT_COOKIE)?.value].find((c) => c && CONNECT_CODE.test(c));
+  const claimCode = [cookieStore.get(CLAIM_COOKIE)?.value].find((c) => c && CLAIM_CODE.test(c));
+  // First save = signup. Tag where they came from, after the response so the redirect doesn't wait.
+  // The "New signup" workflow in PostHog emails Britt on this event, using the profile fields below.
+  const profileFields = {
+    name: field(formData, "name"),
+    stack: field(formData, "stack"),
+    building: field(formData, "building") || null,
+    location: place.location,
+  };
+  after(() => trackSignup(user.id, { connectCode, claimCode, role: profileRole, hasGitHub: Boolean(github), email: user.email, ...profileFields }));
+  if (connectCode) redirect(`/c/${connectCode}`);
+  if (claimCode) redirect(`/claim/${claimCode}`);
   redirect("/welcome"); // first save: show the short how-it-works screen once
+}
+
+// user_signed_up with how they joined, so PostHog can show which links drive signups.
+// The cookies last a day, so someone who signs up later than that counts as "direct".
+// Connect wins over claim, same as the redirect above. The "Invite someone" button shares the
+// plain homepage, so those signups are "direct" too (TODO: add a ?ref= if we want to count them).
+async function trackSignup(userId, { connectCode, claimCode, role, hasGitHub, email, ...profileFields }) {
+  let attribution = { signup_source: "direct" };
+  if (connectCode) {
+    const referrer = await data.getProfileByConnectCode(connectCode);
+    attribution = { signup_source: "connect_link", referrer_id: referrer?.id ?? null, referrer_name: referrer?.name ?? null };
+  } else if (claimCode) {
+    const product = await data.getProductByClaimCode(claimCode);
+    attribution = { signup_source: "claim_link", product_id: product?.id ?? null, product_name: product?.name ?? null };
+  }
+  await captureServerEvent(userId, "user_signed_up", {
+    ...attribution,
+    role,
+    has_github: hasGitHub,
+    ...profileFields, // name, stack, building, location: for the signup alert email
+    $set: { email, name: profileFields.name },
+    $set_once: attribution, // person properties, so any later event can be broken down by how they joined
+  });
 }
 
 // Only names that are really in their GitHub repo list, max 3.
