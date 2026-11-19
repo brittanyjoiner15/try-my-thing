@@ -181,7 +181,14 @@ export async function saveProfile(formData) {
   const connectCode = [cookieStore.get(CONNECT_COOKIE)?.value].find((c) => c && CONNECT_CODE.test(c));
   const claimCode = [cookieStore.get(CLAIM_COOKIE)?.value].find((c) => c && CLAIM_CODE.test(c));
   // First save = signup. Tag where they came from, after the response so the redirect doesn't wait.
-  after(() => trackSignup(user.id, { connectCode, claimCode, role: profileRole, hasGitHub: Boolean(github) }));
+  // The "New signup" workflow in PostHog emails Britt on this event, using the profile fields below.
+  const profileFields = {
+    name: field(formData, "name"),
+    stack: field(formData, "stack"),
+    building: field(formData, "building") || null,
+    location: place.location,
+  };
+  after(() => trackSignup(user.id, { connectCode, claimCode, role: profileRole, hasGitHub: Boolean(github), email: user.email, ...profileFields }));
   if (connectCode) redirect(`/c/${connectCode}`);
   if (claimCode) redirect(`/claim/${claimCode}`);
   redirect("/welcome"); // first save: show the short how-it-works screen once
@@ -191,7 +198,7 @@ export async function saveProfile(formData) {
 // The cookies last a day, so someone who signs up later than that counts as "direct".
 // Connect wins over claim, same as the redirect above. The "Invite someone" button shares the
 // plain homepage, so those signups are "direct" too (TODO: add a ?ref= if we want to count them).
-async function trackSignup(userId, { connectCode, claimCode, role, hasGitHub }) {
+async function trackSignup(userId, { connectCode, claimCode, role, hasGitHub, email, ...profileFields }) {
   let attribution = { signup_source: "direct" };
   if (connectCode) {
     const referrer = await data.getProfileByConnectCode(connectCode);
@@ -204,6 +211,8 @@ async function trackSignup(userId, { connectCode, claimCode, role, hasGitHub }) 
     ...attribution,
     role,
     has_github: hasGitHub,
+    ...profileFields, // name, stack, building, location: for the signup alert email
+    $set: { email, name: profileFields.name },
     $set_once: attribution, // person properties, so any later event can be broken down by how they joined
   });
 }
@@ -260,15 +269,31 @@ async function productImages(formData, productId) {
   return urls;
 }
 
+// What the "New product" workflow in PostHog puts in the email to Britt.
+async function productPostedProps(product, owner, via) {
+  return {
+    product_id: product.id,
+    product_name: product.name,
+    product_url: product.url,
+    product_tagline: product.tagline,
+    product_page: `${await appUrl()}/products/${product.id}`,
+    owner_name: owner.name,
+    via, // "posted" (builder made it) or "claimed" (claim link Britt prefilled)
+  };
+}
+
 export async function createProduct(formData) {
-  const { user } = await requireProfile();
+  const { user, profile } = await requireProfile();
   const id = crypto.randomUUID(); // made here so images can be stored under the product's id
+  const fields = productFields(formData);
   await data.createProduct({
     id,
     owner_id: user.id,
-    ...productFields(formData),
+    ...fields,
     ...(await productImages(formData, id)),
   });
+  const props = await productPostedProps({ id, ...fields }, profile, "posted");
+  after(() => captureServerEvent(user.id, "product_posted", props));
   logPostHogAction("product created", { event: "product_created" });
   await flushPostHogLogs();
   revalidatePath("/products");
@@ -466,11 +491,16 @@ export async function startClaim(code) {
 // Tapping Claim on /claim/<code>. Returns { error } or { ok, productId }; the button then opens the edit
 // page. It goes live in the deck right away: claiming is the builder saying yes.
 export async function claimProduct(code) {
-  const { user } = await requireProfile();
+  const { user, profile } = await requireProfile();
   (await cookies()).delete(CLAIM_COOKIE);
   const productId = CLAIM_CODE.test(code) ? await data.claimProduct(code, user.id) : null;
   if (!productId) return { error: "Someone already claimed this one, or the link changed. Ask whoever sent it to you." };
 
+  const product = await data.getProductWithOwner(productId);
+  if (product) {
+    const props = await productPostedProps(product, profile, "claimed");
+    after(() => captureServerEvent(user.id, "product_posted", props));
+  }
   logPostHogAction("product claimed", { event: "product_claimed", product_id: productId });
   await flushPostHogLogs();
   revalidatePath("/products");
