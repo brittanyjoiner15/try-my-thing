@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import posthog from "posthog-js";
 import { respondToRequest } from "@/app/actions";
 import { Spinner } from "@/app/components/SubmitButton";
+import { isNewVersion, reloadForNewVersion } from "@/lib/new-version";
 
 // Accept / Pass on one product request. Used on the Matches page and on the request line inside a chat.
 export default function RespondButtons({ requestId }) {
@@ -16,6 +17,8 @@ export default function RespondButtons({ requestId }) {
       try {
         result = await respondToRequest(requestId, accept);
       } catch (err) {
+        // Nothing typed to lose here, so after a deploy just reload and let them tap again.
+        if (isNewVersion(err) && reloadForNewVersion("respondToRequest")) return;
         posthog.captureException(err, { feature: "chat", action: "respondToRequest", request_id: requestId });
         return setError("Couldn't save that. Try again.");
       }
