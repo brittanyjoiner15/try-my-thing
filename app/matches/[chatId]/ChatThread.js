@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import posthog from "posthog-js";
 import { sendMessage, pollChat } from "@/app/actions";
+import { isNewVersion, reloadForNewVersion } from "@/lib/new-version";
 import RespondButtons from "../RespondButtons";
 
 const POLL_MS = 5000; // no realtime: the browser has no Supabase client, so we ask the server every few seconds
 const MESSAGE_MAX = 2000; // same limit as app/actions.js
-// After this many failed polls in a row, assume the app was redeployed: server action IDs change on every
-// deploy, so a tab opened before it can't reach the new server until it reloads.
+// After this many failed polls in a row, offer a reload. A new deploy is caught on the first failed poll
+// (see lib/new-version.js), so this covers outages and anything Next.js doesn't report as a new version.
 const FAILS_BEFORE_RELOAD = 3;
 
 const time = (iso) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -32,9 +33,23 @@ export default function ChatThread({ chatId, meId, themName, initialMessages, in
   const failing = useRef(false); // same thing, readable inside the interval without re-creating it
   const [sending, startSending] = useTransition();
   const bottom = useRef(null);
+  const typed = useRef(text); // the message box, readable inside the poll interval
+  const keepKey = `chat-unsent:${chatId}`;
   const first = themName.split(" ")[0];
   const byId = new Map(requests.map((r) => [r.id, r]));
   const waitingOnMe = requests.some((r) => r.status === "pending" && r.product.owner_id === meId);
+
+  useEffect(() => {
+    typed.current = text;
+  }, [text]);
+
+  // Put back a message that was still in the box when the page reloaded for a new version.
+  useEffect(() => {
+    const kept = sessionStorage.getItem(keepKey);
+    if (kept === null) return;
+    sessionStorage.removeItem(keepKey);
+    setText(kept); // eslint-disable-line react-hooks/set-state-in-effect -- sessionStorage only exists in the browser
+  }, [keepKey]);
 
   // Keep the newest message in view.
   useEffect(() => {
@@ -61,6 +76,10 @@ export default function ChatThread({ chatId, meId, themName, initialMessages, in
       try {
         result = await pollChat(chatId, latest);
       } catch (err) {
+        if (isNewVersion(err)) {
+          if (!reloadKeepingText("pollChat", keepKey, typed.current, draft)) setFails(FAILS_BEFORE_RELOAD);
+          return;
+        }
         // Report the first failure in a streak only. Otherwise an outage sends one error every 5s per open chat.
         if (!failing.current) posthog.captureException(err, { feature: "chat", action: "pollChat", chat_id: chatId });
         failing.current = true;
@@ -80,7 +99,7 @@ export default function ChatThread({ chatId, meId, themName, initialMessages, in
       clearInterval(id);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, [chatId, latest, status]);
+  }, [chatId, latest, status, keepKey, draft]);
 
   function send(e) {
     e.preventDefault();
@@ -92,6 +111,10 @@ export default function ChatThread({ chatId, meId, themName, initialMessages, in
       try {
         result = await sendMessage(chatId, body);
       } catch (err) {
+        if (isNewVersion(err)) {
+          if (reloadKeepingText("sendMessage", keepKey, typed.current, draft)) return;
+          return setError("The app was just updated. Copy your message, reload the page, and send it again.");
+        }
         posthog.captureException(err, { feature: "chat", action: "sendMessage", chat_id: chatId });
         return setError("Couldn't send. Check your connection and try again.");
       }
@@ -214,6 +237,16 @@ function RequestLine({ message, request, meId, first }) {
       <MessageTime iso={message.created_at} />
     </li>
   );
+}
+
+// The app was redeployed since this tab opened. Reload so polling and sending work again, keeping any text the
+// person typed (not the untouched pre-written draft). Returns false if it already reloaded a moment ago, so the
+// caller shows a message instead of reloading in a loop.
+function reloadKeepingText(action, keepKey, text, draft) {
+  if (text.trim() && text !== draft) sessionStorage.setItem(keepKey, text);
+  if (reloadForNewVersion(action)) return true;
+  sessionStorage.removeItem(keepKey);
+  return false;
 }
 
 // Adds new messages without duplicates (a poll can return a message we just sent).
