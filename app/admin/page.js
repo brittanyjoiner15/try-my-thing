@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { getAdminData } from "@/lib/data";
+import { getWeeklyGrowth } from "@/lib/posthog-query";
 import { setProductHidden, deleteProductAsAdmin } from "@/app/actions";
 import DeleteProductButton from "@/app/components/DeleteProductButton";
 import SubmitButton from "@/app/components/SubmitButton";
@@ -9,26 +10,30 @@ const day = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short",
 
 export default async function AdminPage() {
   await requireAdmin();
-  const { people, products: all, matches } = await getAdminData();
+  const [{ people, openChats, products: all, matches }, growth] = await Promise.all([getAdminData(), getWeeklyGrowth()]);
   // Unclaimed products (claim links) have no owner yet, so they get their own list.
   const products = all.filter((p) => p.owner_id);
   const unclaimed = all.filter((p) => !p.owner_id);
 
   return (
     <div className="space-y-10">
-      <section className="grid grid-cols-3 gap-4">
+      {/* Totals come from Supabase (always complete). Weekly growth comes from PostHog events. */}
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Stat label="People" value={people} />
-        <Stat label="Products" value={products.length} />
-        <Stat label="Matches" value={matches.length} />
+        <Stat label="Live products" value={products.filter((p) => !p.hidden).length} />
+        <Stat label="Matched (open chats)" value={openChats} />
+        <Stat label="Try requests" value={matches.length} />
       </section>
 
+      <WeeklyGrowth growth={growth} />
+
       <section>
-        <h2 className="mb-3 text-xl font-bold">Matches</h2>
+        <h2 className="mb-3 text-xl font-bold">Try requests</h2>
         <div className="panel overflow-x-auto p-0">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-border text-muted">
               <tr>
-                <th className="p-3">Matched</th>
+                <th className="p-3">Requested</th>
                 <th className="p-3">Product (builder)</th>
                 <th className="p-3">Tester</th>
               </tr>
@@ -47,7 +52,7 @@ export default async function AdminPage() {
               ))}
               {matches.length === 0 && (
                 <tr>
-                  <td className="p-3 text-muted" colSpan={3}>No matches yet.</td>
+                  <td className="p-3 text-muted" colSpan={3}>No requests yet.</td>
                 </tr>
               )}
             </tbody>
@@ -115,5 +120,44 @@ function Stat({ label, value }) {
       <p className="text-3xl font-bold">{value}</p>
       <p className="text-sm text-muted">{label}</p>
     </div>
+  );
+}
+
+// Newest week first. "This week" is partial, so it's labeled.
+function WeeklyGrowth({ growth }) {
+  return (
+    <section>
+      <h2 className="mb-1 text-xl font-bold">Weekly growth</h2>
+      <p className="mb-3 text-sm text-muted">From PostHog. Signups and products are tracked from Nov 19, matches from when match_opened shipped.</p>
+      {growth.error ? (
+        <p className="panel text-sm text-muted">{growth.error}</p>
+      ) : (
+        <div className="panel overflow-x-auto p-0">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-border text-muted">
+              <tr>
+                <th className="p-3">Week of</th>
+                <th className="p-3">Signups</th>
+                <th className="p-3">Products posted</th>
+                <th className="p-3">Matches opened</th>
+              </tr>
+            </thead>
+            <tbody>
+              {growth.weeks.toReversed().map((w, i) => (
+                <tr key={w.week} className="border-b border-border last:border-0">
+                  <td className="p-3">
+                    {day(w.week + "T12:00:00Z")}
+                    {i === 0 && <span className="text-muted"> (this week)</span>}
+                  </td>
+                  <td className="p-3">{w.signups}</td>
+                  <td className="p-3">{w.products}</td>
+                  <td className="p-3">{w.matches}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

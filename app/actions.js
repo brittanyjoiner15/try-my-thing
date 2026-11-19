@@ -407,7 +407,9 @@ export async function swipeBuilder(builderId, direction) {
 
   // The pair may already have a chat from a product request. A builder match opens it.
   const chat = await data.createChat({ user_a: user.id, user_b: builderId, status: "open" });
+  const opened = chat.created || chat.status !== "open";
   if (chat.status !== "open") await data.setChatStatus(chat.id, "open");
+  if (opened) after(() => trackMatchOpened(user.id, chat.id, "builder"));
   revalidatePath("/matches");
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
   after(() => sendBuilderMatchEmails({ chatId: chat.id, a: profile, b: other, chatUrl }));
@@ -445,6 +447,7 @@ export async function connectInPerson(code) {
   logPostHogAction("in person connect", { event: "in_person_connect", already_matched: alreadyOpen });
   await flushPostHogLogs();
   if (!alreadyOpen) {
+    after(() => trackMatchOpened(user.id, chat.id, "in_person"));
     const chatUrl = `${await appUrl()}/matches/${chat.id}`;
     after(() => sendInPersonConnectEmail({ chatId: chat.id, to: other, from: profile, chatUrl }));
   }
@@ -527,6 +530,13 @@ export async function deleteProductAsAdmin(productId) {
 
 // --- Chat ---
 
+// A pair's chat just opened, so both sides are connected. Fired once per chat, the first time it opens,
+// from whichever path opened it. The admin dashboard counts these per week (lib/posthog-query.js).
+// match_type: "product_request" (builder accepted a tester), "builder" (mutual swipe), "in_person" (QR/link).
+function trackMatchOpened(userId, chatId, matchType) {
+  return captureServerEvent(userId, "match_opened", { chat_id: chatId, match_type: matchType });
+}
+
 const hoursSince = (iso) => Math.round(((Date.now() - new Date(iso)) / 36e5) * 10) / 10; // one decimal
 
 // The builder accepts or passes on one product request. Accepting opens the chat. Passing closes it
@@ -538,7 +548,10 @@ export async function respondToRequest(requestId, accept) {
   const chat = await data.getChat(request.chat_id, user.id);
 
   await data.setProductRequestStatus(requestId, accept ? "accepted" : "declined");
-  if (accept && chat.status !== "open") await data.setChatStatus(chat.id, "open");
+  if (accept && chat.status !== "open") {
+    await data.setChatStatus(chat.id, "open");
+    after(() => trackMatchOpened(user.id, chat.id, "product_request"));
+  }
   if (!accept && chat.status === "pending" && !chat.requests.some((r) => r.id !== requestId && r.status !== "declined")) {
     await data.setChatStatus(chat.id, "declined");
   }
