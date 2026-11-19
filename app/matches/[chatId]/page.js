@@ -29,7 +29,7 @@ export default async function ChatPage({ params }) {
         ← Matches
       </Link>
       <header className="flex items-center gap-3">
-        <Link href={`/matches/${chatId}/profile`} aria-label={`${chat.them.name}'s profile`}>
+        <Link href={`/matches/${chatId}/profile`} aria-label={`${chat.them.name}'s profile`} className="shrink-0">
           <Avatar name={chat.them.name} url={chat.them.avatar_url} />
         </Link>
         <div className="min-w-0">
