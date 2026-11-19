@@ -342,7 +342,7 @@ export async function swipe(productId, direction) {
   await data.insertMessage({ chat_id: chat.id, sender_id: user.id, kind: "request", request_id: request.id, body: `wants to try ${product.name}` });
 
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
-  await emailAfterResponse(() => sendProductMatchEmails({ product, builder: product.owner, tester: profile, chatUrl, alreadyChatting: accepted }));
+  await emailAfterResponse(() => sendProductMatchEmails({ requestId: request.id, product, builder: product.owner, tester: profile, chatUrl, alreadyChatting: accepted }));
   return { ok: true, match: { product: product.name, builderName: product.owner.name, chatId: chat.id, accepted } };
 }
 
@@ -372,7 +372,7 @@ export async function swipeBuilder(builderId, direction) {
   if (chat.status !== "open") await data.setChatStatus(chat.id, "open");
   revalidatePath("/matches");
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
-  await emailAfterResponse(() => sendBuilderMatchEmails({ a: profile, b: other, chatUrl }));
+  await emailAfterResponse(() => sendBuilderMatchEmails({ chatId: chat.id, a: profile, b: other, chatUrl }));
   return { ok: true, match: { name: other.name, chatId: chat.id } };
 }
 
@@ -408,7 +408,7 @@ export async function connectInPerson(code) {
   await flushPostHogLogs();
   if (!alreadyOpen) {
     const chatUrl = `${await appUrl()}/matches/${chat.id}`;
-    await emailAfterResponse(() => sendInPersonConnectEmail({ to: other, from: profile, chatUrl }));
+    await emailAfterResponse(() => sendInPersonConnectEmail({ chatId: chat.id, to: other, from: profile, chatUrl }));
   }
   redirect(`/matches/${chat.id}`);
 }
@@ -501,7 +501,7 @@ export async function respondToRequest(requestId, accept) {
   await flushPostHogLogs();
   if (accept) {
     const [tester, chatUrl] = [await data.getProfile(request.tester_id), `${await appUrl()}/matches/${chat.id}`];
-    await emailAfterResponse(() => sendChatAcceptedEmail({ product: request.product, builder: profile, tester, chatUrl }));
+    await emailAfterResponse(() => sendChatAcceptedEmail({ requestId, product: request.product, builder: profile, tester, chatUrl }));
   }
   revalidatePath("/matches");
   revalidatePath(`/matches/${chat.id}`);
@@ -550,7 +550,7 @@ export async function sendMessage(chatId, text) {
   if (!notifiedAt || (readAt && readAt > notifiedAt)) {
     await data.touchChat(chatId, them, "notified");
     const [to, chatUrl] = [await data.getProfile(chat.them.id), `${await appUrl()}/matches/${chatId}`];
-    await emailAfterResponse(() => sendNewMessageEmail({ to, from: profile, body, chatUrl }));
+    await emailAfterResponse(() => sendNewMessageEmail({ messageId: message.id, to, from: profile, body, chatUrl }));
   }
 
   await logAction("message sent", { event: "message_sent", ...stats });
