@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAuthClient } from "@/lib/supabase/server";
-import { DEMO_ENV, DEMO_GITHUB, GITHUB_LINK_COOKIE, isDemo } from "@/lib/demo";
+import { GITHUB_LINK_COOKIE } from "@/lib/github";
 import { getUser, requireProfile, requireAdmin, isAdmin } from "@/lib/session";
 import * as data from "@/lib/data";
 import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TYPES } from "@/lib/product-options";
@@ -29,17 +29,6 @@ async function appUrl() {
   return (await headers()).get("origin") ?? process.env.URL ?? "http://localhost:3000";
 }
 
-// Server logs carry is_demo so /demo visitors can be filtered out of (or into) the real numbers.
-async function logAction(body, attributes) {
-  logPostHogAction(body, { ...attributes, is_demo: await isDemo() });
-}
-
-// Match and message emails. /demo people have fake addresses, so nothing is sent for them.
-// Local demo (no keys) still runs it, and lib/match-emails.js prints the email to the console instead.
-async function emailAfterResponse(send) {
-  if (DEMO_ENV || !(await isDemo())) after(send);
-}
-
 const field = (formData, name) => String(formData.get(name) ?? "").trim();
 
 export async function sendMagicLink(_prevState, formData) {
@@ -58,7 +47,6 @@ export async function sendMagicLink(_prevState, formData) {
 
 // "Continue with GitHub" on /login. New and returning users both come back through /auth/callback.
 export async function signInWithGitHub() {
-  if (await isDemo()) redirect("/swipe");
   const origin = (await headers()).get("origin");
   const supabase = await createAuthClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -74,11 +62,6 @@ export async function signInWithGitHub() {
 export async function connectGitHub() {
   const user = await getUser(); // not requireProfile: onboarding offers this before the first save
   if (!user) redirect("/login");
-  if (await isDemo()) {
-    await data.saveGitHubProfile({ id: user.id, ...DEMO_GITHUB, fetched_at: new Date().toISOString() });
-    redirect("/profile?github=connected");
-  }
-
   const origin = (await headers()).get("origin");
   const supabase = await createAuthClient();
   const { data: link, error } = await supabase.auth.linkIdentity({
@@ -95,7 +78,6 @@ export async function refreshGitHub() {
   const { user } = await requireProfile();
   const current = await data.getGitHubProfile(user.id);
   if (!current) redirect("/profile");
-  if (await isDemo()) redirect("/profile?github=refreshed"); // demo GitHub data never changes
   try {
     await data.saveGitHubProfile({ id: user.id, ...(await fetchGitHubProfile(null, current.username)) });
   } catch (e) {
@@ -111,14 +93,12 @@ export async function refreshGitHub() {
 // so their data comes back on next sign-in. They can still pick no repos to keep them off their card.
 export async function disconnectGitHub() {
   const { user } = await requireProfile();
-  if (!(await isDemo())) {
-    const supabase = await createAuthClient();
-    const { data: ids } = await supabase.auth.getUserIdentities();
-    const github = ids?.identities?.find((i) => i.provider === "github");
-    if (github && ids.identities.length > 1) {
-      const { error } = await supabase.auth.unlinkIdentity(github);
-      if (error) redirect("/profile?github=error");
-    }
+  const supabase = await createAuthClient();
+  const { data: ids } = await supabase.auth.getUserIdentities();
+  const github = ids?.identities?.find((i) => i.provider === "github");
+  if (github && ids.identities.length > 1) {
+    const { error } = await supabase.auth.unlinkIdentity(github);
+    if (error) redirect("/profile?github=error");
   }
   await data.deleteGitHubProfile(user.id);
   revalidatePath("/profile");
@@ -126,10 +106,8 @@ export async function disconnectGitHub() {
 }
 
 export async function signOut() {
-  if (!DEMO_ENV) {
-    const supabase = await createAuthClient();
-    await supabase.auth.signOut();
-  }
+  const supabase = await createAuthClient();
+  await supabase.auth.signOut();
   redirect("/");
 }
 
@@ -186,7 +164,7 @@ export async function saveProfile(formData) {
     // The repo picker only renders when GitHub is connected. Otherwise keep what they picked before.
     featured_repos: github ? pickedRepos(formData, github) : (existing?.featured_repos ?? null),
   });
-  await logAction("profile saved", {
+  logPostHogAction("profile saved", {
     event: "profile_saved",
     profile_state: existing ? "updated" : "created",
     role: profileRole,
@@ -268,7 +246,7 @@ export async function createProduct(formData) {
     ...productFields(formData),
     ...(await productImages(formData, id)),
   });
-  await logAction("product created", { event: "product_created" });
+  logPostHogAction("product created", { event: "product_created" });
   await flushPostHogLogs();
   revalidatePath("/products");
   redirect(`/products/${id}`);
@@ -321,7 +299,7 @@ export async function swipe(productId, direction) {
   const { duplicate } = await data.insertSwipe({ tester_id: user.id, product_id: productId, direction });
   if (duplicate) return { error: "You already swiped on this one." };
 
-  await logAction("product swipe recorded", {
+  logPostHogAction("product swipe recorded", {
     event: "product_swipe_recorded",
     direction,
   });
@@ -342,7 +320,7 @@ export async function swipe(productId, direction) {
   await data.insertMessage({ chat_id: chat.id, sender_id: user.id, kind: "request", request_id: request.id, body: `wants to try ${product.name}` });
 
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
-  await emailAfterResponse(() => sendProductMatchEmails({ requestId: request.id, product, builder: product.owner, tester: profile, chatUrl, alreadyChatting: accepted }));
+  after(() => sendProductMatchEmails({ requestId: request.id, product, builder: product.owner, tester: profile, chatUrl, alreadyChatting: accepted }));
   return { ok: true, match: { product: product.name, builderName: product.owner.name, chatId: chat.id, accepted } };
 }
 
@@ -372,7 +350,7 @@ export async function swipeBuilder(builderId, direction) {
   if (chat.status !== "open") await data.setChatStatus(chat.id, "open");
   revalidatePath("/matches");
   const chatUrl = `${await appUrl()}/matches/${chat.id}`;
-  await emailAfterResponse(() => sendBuilderMatchEmails({ chatId: chat.id, a: profile, b: other, chatUrl }));
+  after(() => sendBuilderMatchEmails({ chatId: chat.id, a: profile, b: other, chatUrl }));
   return { ok: true, match: { name: other.name, chatId: chat.id } };
 }
 
@@ -404,11 +382,11 @@ export async function connectInPerson(code) {
   if (!alreadyOpen && !chat.created) await data.setChatStatus(chat.id, "open");
   revalidatePath("/matches");
 
-  await logAction("in person connect", { event: "in_person_connect", already_matched: alreadyOpen });
+  logPostHogAction("in person connect", { event: "in_person_connect", already_matched: alreadyOpen });
   await flushPostHogLogs();
   if (!alreadyOpen) {
     const chatUrl = `${await appUrl()}/matches/${chat.id}`;
-    await emailAfterResponse(() => sendInPersonConnectEmail({ chatId: chat.id, to: other, from: profile, chatUrl }));
+    after(() => sendInPersonConnectEmail({ chatId: chat.id, to: other, from: profile, chatUrl }));
   }
   redirect(`/matches/${chat.id}`);
 }
@@ -417,7 +395,7 @@ export async function connectInPerson(code) {
 export async function resetConnectCode() {
   const { user } = await requireProfile();
   await data.setConnectCode(user.id, newConnectCode());
-  await logAction("connect link reset", { event: "connect_link_reset" });
+  logPostHogAction("connect link reset", { event: "connect_link_reset" });
   await flushPostHogLogs();
   revalidatePath("/profile");
 }
@@ -436,7 +414,7 @@ export async function createUnclaimedProduct(formData) {
     ...productFields(formData),
     ...(await productImages(formData, id)),
   });
-  await logAction("unclaimed product created", { event: "unclaimed_product_created", product_id: id });
+  logPostHogAction("unclaimed product created", { event: "unclaimed_product_created", product_id: id });
   await flushPostHogLogs();
   revalidatePath("/admin");
   redirect(`/claim/${claimCode}`); // the admin preview there has the link to copy
@@ -458,7 +436,7 @@ export async function claimProduct(code) {
   const productId = CLAIM_CODE.test(code) ? await data.claimProduct(code, user.id) : null;
   if (!productId) return { error: "Someone already claimed this one, or the link changed. Ask whoever sent it to you." };
 
-  await logAction("product claimed", { event: "product_claimed", product_id: productId });
+  logPostHogAction("product claimed", { event: "product_claimed", product_id: productId });
   await flushPostHogLogs();
   revalidatePath("/products");
   revalidatePath("/admin");
@@ -490,7 +468,7 @@ export async function respondToRequest(requestId, accept) {
   }
 
   const hoursWaiting = hoursSince(request.created_at);
-  await logAction("tester request answered", {
+  logPostHogAction("tester request answered", {
     event: "tester_request_answered",
     accepted: accept,
     chat_id: chat.id,
@@ -501,7 +479,7 @@ export async function respondToRequest(requestId, accept) {
   await flushPostHogLogs();
   if (accept) {
     const [tester, chatUrl] = [await data.getProfile(request.tester_id), `${await appUrl()}/matches/${chat.id}`];
-    await emailAfterResponse(() => sendChatAcceptedEmail({ requestId, product: request.product, builder: profile, tester, chatUrl }));
+    after(() => sendChatAcceptedEmail({ requestId, product: request.product, builder: profile, tester, chatUrl }));
   }
   revalidatePath("/matches");
   revalidatePath(`/matches/${chat.id}`);
@@ -536,7 +514,7 @@ export async function sendMessage(chatId, text) {
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   if ((await data.countRecentMessages(user.id, tenMinAgo)) >= MAX_MESSAGES_PER_10_MIN) {
     // Our own limit, not an outage. Logged so we can see if it's set too low for real conversations.
-    await logAction("message rate limited", { event: "message_rate_limited", chat_id: chatId, limit: MAX_MESSAGES_PER_10_MIN });
+    logPostHogAction("message rate limited", { event: "message_rate_limited", chat_id: chatId, limit: MAX_MESSAGES_PER_10_MIN });
     await flushPostHogLogs();
     return { error: "You're sending a lot of messages. Take a breather and try again in a few minutes." };
   }
@@ -550,10 +528,10 @@ export async function sendMessage(chatId, text) {
   if (!notifiedAt || (readAt && readAt > notifiedAt)) {
     await data.touchChat(chatId, them, "notified");
     const [to, chatUrl] = [await data.getProfile(chat.them.id), `${await appUrl()}/matches/${chatId}`];
-    await emailAfterResponse(() => sendNewMessageEmail({ messageId: message.id, to, from: profile, body, chatUrl }));
+    after(() => sendNewMessageEmail({ messageId: message.id, to, from: profile, body, chatUrl }));
   }
 
-  await logAction("message sent", { event: "message_sent", ...stats });
+  logPostHogAction("message sent", { event: "message_sent", ...stats });
   await flushPostHogLogs();
   return { message, stats };
 }

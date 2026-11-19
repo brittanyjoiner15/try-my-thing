@@ -10,6 +10,10 @@ const nextConfig = {
       },
     },
   },
+  // Demo mode is gone. Old shared /demo links go to the home page instead of a 404.
+  async redirects() {
+    return [{ source: "/demo/:path*", destination: "/", permanent: false }];
+  },
   experimental: {
     serverActions: {
       // Product form uploads a logo + screenshot (2MB max each). Default limit is 1MB.

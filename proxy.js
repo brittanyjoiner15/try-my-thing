@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 // Refreshes the Supabase login session on every request so it doesn't silently expire.
 export async function proxy(request) {
   let response = NextResponse.next({ request });
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return response; // demo mode, no login
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,

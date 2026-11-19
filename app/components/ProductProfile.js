@@ -1,6 +1,6 @@
 // Hinge-style product profile. Used on the swipe card and on /products/[id].
 // No hooks or event handlers, so it renders on the server or inside the client swipe deck.
-/* eslint-disable @next/next/no-img-element -- images come from Supabase Storage or data URLs (demo); plain <img> skips next/image remote config */
+/* eslint-disable @next/next/no-img-element -- images come from Supabase Storage; plain <img> skips next/image remote config */
 
 export default function ProductProfile({ product }) {
   const [first, second, third] = product.prompts ?? [];

@@ -18,19 +18,12 @@ Tinder for trying software. Builders post what they're making, testers swipe thr
 - `/matches/[chatId]`: one chat per pair of people. Product requests show as "X wants to try Y" lines with Accept / Pass for the builder. It checks for new messages every 5 seconds (no realtime, see the privacy model), and offers a Reload after 3 failed checks (usually a new deploy). The first message is pre-written from `lib/intro.js`. Max 2,000 characters per message and 30 messages per 10 minutes. The other person gets one email per unread stretch, not one per message.
 - `/profile`: edit your profile, including the builder fields and the "Show me to other builders" opt-in. City is geocoded with OpenStreetMap Nominatim (`lib/geocode.js`) and stored rounded to ~10 km. Sign out lives here.
 - `/c/[code]`: someone's in-person link, from the QR code on their `/profile`. Tapping Connect opens the pair's chat right away (same as a builder match) and emails the owner. Signed-out visitors sign up and land back here (`tmt_connect` cookie). "Reset link" on `/profile` makes a new code so the old link stops working. Logic in `lib/connect.js` and `connectInPerson` in `app/actions.js`.
-- `/demo`: try the app on fake data without an account (see Demo mode).
 - `/admin`: all matches, and hide/unhide products. Only emails in `ADMIN_EMAILS` can open it.
 
 **Privacy model:** RLS is on with no policies, so the browser can't read any table. Server code checks who's logged in, then reads with the secret key. Emails are only shown to admins. Matches talk through `chats` (one per pair), `product_requests` and `messages`, which the browser reads through server actions, so realtime would need RLS policies and a browser Supabase client.
 
-## Demo mode
-Two ways in, both on the fake data in `lib/data/mock.js`, signed in as "Demo You":
-- **`/demo` on the real site:** for showing the app to people without an account. It sets a `tmt_demo` cookie, gives that browser its own copy of the fake data, and opens `/swipe`. An orange banner has "Exit demo". Nothing reaches Supabase, no emails are sent, `/admin` is hidden, and PostHog events carry `is_demo: true` (visitors aren't identified). The data lives in server memory, so on Netlify it resets whenever a function instance restarts. Linked from the landing and login pages.
-- **No setup (local):** `pnpm install && pnpm dev` with no `.env.local`. The whole server is one shared demo, and Demo You is also an admin. Emails print to the console.
-
-In demo chats the other person answers a few seconds after you send a message (canned replies in `mock.js`). Product logos and screenshots are SVGs in `public/demo/`, drawn by `node scripts/generate-demo-images.mjs`.
-
-All data access goes through `lib/data/index.js`, which picks `mock.js` or `supabase.js`. Add a function to both when you need new data.
+## Data
+All data access goes through `lib/data/index.js`, which re-exports `lib/data/supabase.js`. There's no demo or mock mode: the app always needs Supabase keys in `.env.local`. Old `/demo` links redirect to the home page (`next.config.mjs`).
 
 ## Run it with Supabase
 1. Create a Supabase project at supabase.com.

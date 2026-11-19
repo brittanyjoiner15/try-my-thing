@@ -64,7 +64,7 @@ What the PostHog wizard changed in this app, what a review (Claude Code, 2026-11
 ### Fix before committing
 
 **1. Dev-mode crash when env vars are missing.** ✅ Decided: keep it.
-In both `instrumentation-client.js` and `instrumentation.js`, the app throws if the PostHog vars aren't set. Britt is fine with this: a real app needs the keys anyway. The only cost is that demo mode no longer runs without PostHog keys.
+In both `instrumentation-client.js` and `instrumentation.js`, the app throws if the PostHog vars aren't set. Britt is fine with this: a real app needs the keys anyway.
 
 **2. Rename the env vars on Netlify.** ✅ Done (2026-11-04).
 The wizard renamed `NEXT_PUBLIC_POSTHOG_KEY` to `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`. Outside development, a missing token fails silently (no error, no analytics), so Netlify needed the new name. `NEXT_PUBLIC_POSTHOG_HOST` was already set there. The first deploy after the rename then failed Netlify's secret scan: the scanner flagged the PostHog token in the build output, even though the token is public by design (it ships in browser JavaScript). Fixed by adding `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` to `SECRETS_SCAN_OMIT_KEYS` in Netlify. We kept the new names in code because they match PostHog's current setup, so future wizard runs won't rename them again. Leftover: delete the empty `NEXT_PUBLIC_POSTHOG_KEY=` line from `.env.local`.
