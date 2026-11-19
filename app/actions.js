@@ -17,6 +17,7 @@ import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
 import { sendProductMatchEmails, sendBuilderMatchEmails, sendChatAcceptedEmail, sendNewMessageEmail, sendInPersonConnectEmail } from "@/lib/match-emails";
 import { CONNECT_COOKIE, CONNECT_CODE, newConnectCode } from "@/lib/connect";
 import { CLAIM_COOKIE, CLAIM_CODE, newClaimCode } from "@/lib/claim";
+import { signInReturnTo } from "@/lib/return-to";
 
 // Keeps testers from right-swiping everything and flooding builders with no-shows.
 const MAX_RIGHT_SWIPES_PER_WEEK = 3;
@@ -43,6 +44,21 @@ export async function sendMagicLink(_prevState, formData) {
   });
   if (error) return { error: error.message };
   return { sent: email };
+}
+
+// The same email also has a one-time code (the Magic Link template shows {{ .Token }}). Typing it in
+// signs people in on this device, which matters for the home screen app: on iOS it has its own
+// cookies, so tapping the link would sign them in to Safari instead. Issue #48.
+export async function verifyEmailCode(_prevState, formData) {
+  const email = field(formData, "email");
+  const token = field(formData, "code").replace(/\s/g, "");
+  // Supabase's code length is configurable (6 to 10 digits), so don't hardcode 6.
+  if (!email || !/^\d{6,10}$/.test(token)) return { error: "Enter the code from the email." };
+
+  const supabase = await createAuthClient();
+  const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+  if (error) return { error: "That code didn't work. It may have expired, or a newer email replaced it." };
+  redirect(signInReturnTo(await cookies()) ?? "/swipe");
 }
 
 // "Continue with GitHub" on /login. New and returning users both come back through /auth/callback.
