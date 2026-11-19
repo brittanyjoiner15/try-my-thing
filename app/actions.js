@@ -12,7 +12,7 @@ import { PLATFORMS, PROMPTS, PROMPT_SLOTS, ANSWER_MAX, IMAGE_MAX_BYTES, IMAGE_TY
 import { ROLES, TOPICS, LOOKING_FOR, TOPICS_MAX, BUILDING_MAX } from "@/lib/profile-options";
 import { geocode } from "@/lib/geocode";
 import { fetchGitHubProfile } from "@/lib/github";
-import { captureServerError } from "@/lib/posthog-server";
+import { captureServerError, captureServerEvent } from "@/lib/posthog-server";
 import { flushPostHogLogs, logPostHogAction } from "@/lib/posthog-logs";
 import { sendProductMatchEmails, sendBuilderMatchEmails, sendChatAcceptedEmail, sendNewMessageEmail, sendInPersonConnectEmail } from "@/lib/match-emails";
 import { CONNECT_COOKIE, CONNECT_CODE, newConnectCode } from "@/lib/connect";
@@ -179,9 +179,22 @@ export async function saveProfile(formData) {
   // which is fine since they're about to land in a chat or on their product.
   const cookieStore = await cookies();
   const connectCode = cookieStore.get(CONNECT_COOKIE)?.value;
-  if (connectCode && CONNECT_CODE.test(connectCode)) redirect(`/c/${connectCode}`);
   const claimCode = cookieStore.get(CLAIM_COOKIE)?.value;
-  if (claimCode && CLAIM_CODE.test(claimCode)) redirect(`/claim/${claimCode}`);
+  // First save = they joined. The "New signup" workflow in PostHog emails Britt on this event.
+  const joinedVia = connectCode && CONNECT_CODE.test(connectCode) ? "in_person" : claimCode && CLAIM_CODE.test(claimCode) ? "claim_link" : "direct";
+  after(() =>
+    captureServerEvent(user.id, "user_joined", {
+      name: field(formData, "name"),
+      role: profileRole,
+      stack: field(formData, "stack"),
+      building: field(formData, "building") || null,
+      location: place.location,
+      joined_via: joinedVia,
+      $set: { email: user.email, name: field(formData, "name") },
+    }),
+  );
+  if (joinedVia === "in_person") redirect(`/c/${connectCode}`);
+  if (joinedVia === "claim_link") redirect(`/claim/${claimCode}`);
   redirect("/welcome"); // first save: show the short how-it-works screen once
 }
 
@@ -237,15 +250,31 @@ async function productImages(formData, productId) {
   return urls;
 }
 
+// What the "New product" workflow in PostHog puts in the email to Britt.
+async function productPostedProps(product, owner, via) {
+  return {
+    product_id: product.id,
+    product_name: product.name,
+    product_url: product.url,
+    product_tagline: product.tagline,
+    product_page: `${await appUrl()}/products/${product.id}`,
+    owner_name: owner.name,
+    via, // "posted" (builder made it) or "claimed" (claim link Britt prefilled)
+  };
+}
+
 export async function createProduct(formData) {
-  const { user } = await requireProfile();
+  const { user, profile } = await requireProfile();
   const id = crypto.randomUUID(); // made here so images can be stored under the product's id
+  const fields = productFields(formData);
   await data.createProduct({
     id,
     owner_id: user.id,
-    ...productFields(formData),
+    ...fields,
     ...(await productImages(formData, id)),
   });
+  const props = await productPostedProps({ id, ...fields }, profile, "posted");
+  after(() => captureServerEvent(user.id, "product_posted", props));
   logPostHogAction("product created", { event: "product_created" });
   await flushPostHogLogs();
   revalidatePath("/products");
@@ -443,11 +472,16 @@ export async function startClaim(code) {
 // Tapping Claim on /claim/<code>. Returns { error } or { ok, productId }; the button then opens the edit
 // page. It goes live in the deck right away: claiming is the builder saying yes.
 export async function claimProduct(code) {
-  const { user } = await requireProfile();
+  const { user, profile } = await requireProfile();
   (await cookies()).delete(CLAIM_COOKIE);
   const productId = CLAIM_CODE.test(code) ? await data.claimProduct(code, user.id) : null;
   if (!productId) return { error: "Someone already claimed this one, or the link changed. Ask whoever sent it to you." };
 
+  const product = await data.getProductWithOwner(productId);
+  if (product) {
+    const props = await productPostedProps(product, profile, "claimed");
+    after(() => captureServerEvent(user.id, "product_posted", props));
+  }
   logPostHogAction("product claimed", { event: "product_claimed", product_id: productId });
   await flushPostHogLogs();
   revalidatePath("/products");
