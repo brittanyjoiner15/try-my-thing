@@ -109,7 +109,7 @@ function ChatRow({ chat, meId, children }) {
   return (
     <div className="panel flex flex-wrap items-center justify-between gap-4 py-4">
       <div className="flex min-w-0 items-start gap-3">
-        <Link href={`/matches/${chat.id}/profile`} aria-label={`${them.name}'s profile`}>
+        <Link href={`/matches/${chat.id}/profile`} aria-label={`${them.name}'s profile`} className="shrink-0">
           <Avatar name={them.name} url={them.avatar_url} />
         </Link>
         <div className="min-w-0">
