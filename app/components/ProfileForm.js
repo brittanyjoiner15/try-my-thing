@@ -42,7 +42,8 @@ export default function ProfileForm({ profile, github, title, intro, submitLabel
         name="avatar"
         label="Profile photo (optional)"
         shape="round"
-        hint="Shown on your builder card. PNG, JPG or WebP, under 2MB."
+        hint="Shown on your builder card."
+        size="At least 200×200px"
         currentUrl={profile?.avatar_url || gh.avatar_url}
       />
       {profile?.avatar_url && differs("avatar_url") && (

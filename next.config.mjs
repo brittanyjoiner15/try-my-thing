@@ -16,7 +16,7 @@ const nextConfig = {
   },
   experimental: {
     serverActions: {
-      // Product form uploads a logo + screenshot (2MB max each). Default limit is 1MB.
+      // Product form uploads a logo + screenshot (2MB max each; bigger picks are shrunk in the browser). Default limit is 1MB.
       // Netlify caps function requests at 6MB, so don't raise this past that.
       bodySizeLimit: "5mb",
     },

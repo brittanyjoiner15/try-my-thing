@@ -36,12 +36,13 @@ export default function ProductForm({ action, product, title, intro, submitLabel
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-        <ImageInput name="logo" label="Logo" hint="Square works best. PNG, JPG or WebP, under 2MB." currentUrl={product?.logo_url} />
+        <ImageInput name="logo" label="Logo" hint="Square works best." size="At least 200×200px" currentUrl={product?.logo_url} />
         <ImageInput
           name="screenshot"
           label="Phone screenshot"
           shape="phone"
           hint="A vertical screen, like you're looking at it on your phone. Cards with one stand out."
+          size="Around 1080×1920px"
           currentUrl={product?.screenshot_url}
         />
       </div>
