@@ -14,9 +14,9 @@ Tinder for trying software. Read `README.md` first for routes and the privacy mo
 
 ### Where things run
 - **Hosting:** Netlify (not Vercel, despite the README's Deploy section). Netlify caps function requests at 6MB, which is why `serverActions.bodySizeLimit` is 5MB.
-- **Domain:** `trymything.app`, registered and DNS on Cloudflare. Not wired to Netlify or set as the Supabase Site URL yet.
+- **Domain:** `trymything.app`, registered and DNS on Cloudflare (DKIM, SPF and DMARC set). Points at Netlify, and it's the Supabase Site URL (`https://trymything.app/**` is in the redirect allow list).
 - **Supabase:** project `try-my-thing`, ref `kwuossjlcjpzmhmlzhuu`.
-- **Email:** Supabase Auth sends magic links through Resend SMTP (match emails moved to PostHog, see below) (`smtp.resend.com:465`, user `resend`). Resend is verified on the **root** domain, so the sender must be `@trymything.app` (not `@mail.trymything.app`).
+- **Email:** Supabase Auth sends magic links through Resend SMTP, with branded templates in `supabase/templates/` (pasted into Supabase by hand, so re-paste after edits) (match emails moved to PostHog, see below) (`smtp.resend.com:465`, user `resend`). Resend is verified on the **root** domain, so the sender must be `@trymything.app` (not `@mail.trymything.app`).
 - **Match emails:** `lib/match-emails.js` emails both people on a match (tester and builder, or two builders), the tester when a builder accepts, and the other person on a new chat message, as **PostHog transactional emails** sent from `after()` so swipes don't wait on it. Copy and design live in PostHog (Workflows → Transactional, 6 templates tagged `try-my-thing`, sender `hello@mail.trymything.app`); the code passes a template ID and `{{ variables.* }}`, so renaming a variable means changing both. Edit wording in PostHog and publish, no deploy needed. Needs `POSTHOG_SECRET_KEY` (project secret API key, Transactional email: Write). Without it nothing is sent and the server logs a warning. Open/click events are on and land on the recipient's person. The new-message template has Protect sensitive data on. No email has a Reply-To and none shows the other person's address: people never see each other's emails.
 - **PostHog:** US cloud. Env vars are `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST`, set in `.env.local` and Netlify (renamed from `NEXT_PUBLIC_POSTHOG_KEY` on 2026-11-04). Session replay is off for this app's project.
 
@@ -53,8 +53,7 @@ Added by the PostHog wizard on 2026-11-04. Review and open items: `docs/posthog-
 - To drive a browser, use `playwright-core` with the installed Chrome (`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`).
 
 ### Open follow-ups
-- Point `trymything.app` at Netlify, then set the Supabase Site URL and Redirect URLs to it.
-- Branded Supabase email templates (they still use the plain defaults).
+- Magic links still point at `supabase.co`. An `/auth/confirm` route (token_hash + `verifyOtp`) would keep the link on `trymything.app`, which helps with spam.
 - Chat: block/report, live unread badge (it only updates on page loads), and a "Remove" for declined requests.
 - "Remove image" button, and deleting replaced images from storage (TODO in `app/actions.js`).
 - GitHub: ranking builder cards on shared GitHub languages (skipped until there are enough builders). LinkedIn's API only returns name/email/photo, so it stays a plain URL field.
