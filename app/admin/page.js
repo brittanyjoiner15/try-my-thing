@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { getAdminData } from "@/lib/data";
 import { getWeeklyGrowth } from "@/lib/posthog-query";
+import { getLatestDeploy } from "@/lib/netlify";
 import { setProductHidden, deleteProductAsAdmin } from "@/app/actions";
 import DeleteProductButton from "@/app/components/DeleteProductButton";
 import SubmitButton from "@/app/components/SubmitButton";
@@ -10,7 +11,11 @@ const day = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short",
 
 export default async function AdminPage() {
   await requireAdmin();
-  const [{ people, openChats, products: all, matches }, growth] = await Promise.all([getAdminData(), getWeeklyGrowth()]);
+  const [{ people, openChats, products: all, matches }, growth, deploy] = await Promise.all([
+    getAdminData(),
+    getWeeklyGrowth(),
+    getLatestDeploy(),
+  ]);
   // Unclaimed products (claim links) have no owner yet, so they get their own list.
   const products = all.filter((p) => p.owner_id);
   const unclaimed = all.filter((p) => !p.owner_id);
@@ -24,6 +29,8 @@ export default async function AdminPage() {
         <Stat label="Matched (open chats)" value={openChats} />
         <Stat label="Try requests" value={matches.length} />
       </section>
+
+      <LatestDeploy result={deploy} />
 
       <WeeklyGrowth growth={growth} />
 
@@ -156,6 +163,47 @@ function WeeklyGrowth({ growth }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const DEPLOY_STATES = {
+  ready: { label: "Live", className: "text-green-600" },
+  error: { label: "Failed", className: "text-red-600" },
+};
+
+function LatestDeploy({ result }) {
+  const d = result.deploy;
+  const state = d && (DEPLOY_STATES[d.state] ?? { label: `In progress (${d.state})`, className: "text-muted" });
+  return (
+    <section>
+      <h2 className="mb-3 text-xl font-bold">Latest deploy</h2>
+      {result.error ? (
+        <p className="panel text-sm text-muted">{result.error}</p>
+      ) : (
+        <div className="panel space-y-1 text-sm">
+          <p>
+            <span className={`font-bold ${state.className}`}>{state.label}</span>
+            <span className="text-muted">
+              {" "}
+              · {new Date(d.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} ·{" "}
+              {d.branch}
+            </span>
+          </p>
+          <p className="font-bold">{d.title || "(no commit message)"}</p>
+          {d.error && <p className="text-red-600">{d.error}</p>}
+          <p className="flex gap-4">
+            {d.commitUrl && (
+              <a href={d.commitUrl} target="_blank" rel="noreferrer" className="underline">
+                Commit {d.commit}
+              </a>
+            )}
+            <a href={d.logUrl} target="_blank" rel="noreferrer" className="underline">
+              Deploy log
+            </a>
+          </p>
         </div>
       )}
     </section>
