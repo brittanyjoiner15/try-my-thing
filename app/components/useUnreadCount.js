@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { pollUnread } from "@/app/actions";
 
 // The layout only renders on full page loads, so on its own the Matches badge goes stale while people
@@ -13,6 +13,7 @@ const ICON_ID = "unread-favicon";
 export default function useUnreadCount(initial) {
   const [count, setCount] = useState(initial);
   const pathname = usePathname();
+  const router = useRouter();
 
   // A server render (full load, server action) has the freshest number, so take it when it changes.
   const [lastInitial, setLastInitial] = useState(initial);
@@ -27,6 +28,14 @@ export default function useUnreadCount(initial) {
     let stopped = false;
     const tick = async () => {
       if (document.hidden) return;
+      // On /matches the rows (unread badges, last message dates) are server-rendered and go stale too.
+      // A refresh re-renders the page and the layout, so the tab badge updates through `initial` above.
+      // Refreshing every tick (not only when the count changes) because the count is chats, not messages:
+      // a 2nd message in an already-unread chat doesn't change it.
+      if (pathname === "/matches") {
+        router.refresh();
+        return;
+      }
       try {
         const n = await pollUnread();
         if (!stopped && typeof n === "number") setCount(n);
@@ -42,7 +51,7 @@ export default function useUnreadCount(initial) {
       clearInterval(id);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, [pathname]);
+  }, [pathname, router]);
 
   useTitleCount(count);
   useFaviconDot(count);
