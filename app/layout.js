@@ -12,6 +12,8 @@ export const metadata = {
   metadataBase: new URL(process.env.URL ?? "http://localhost:3000"),
   title: "Try my thing",
   description: "Builders find real testers. Testers find new tools first.",
+  // Home Screen app on iOS: full screen, with this name under the icon. Matches app/manifest.js.
+  appleWebApp: { capable: true, title: "try my thing", statusBarStyle: "default" },
 };
 
 // viewportFit lets the tab bar sit above the iPhone home indicator (see safe-area padding in BottomNav).

@@ -121,6 +121,27 @@ export async function disconnectGitHub() {
   redirect("/profile");
 }
 
+// "Turn on notifications" on /profile (PushToggle). Saves this device's push subscription. Issue #48.
+export async function enablePush(subscription) {
+  const user = await getUser();
+  if (!user) return { error: "Sign in first." };
+  const { endpoint, keys } = subscription ?? {};
+  // Push services are always https. Anything else isn't a real subscription.
+  if (typeof endpoint !== "string" || !endpoint.startsWith("https://") || !keys?.p256dh || !keys?.auth) {
+    return { error: "That didn't work. Try again." };
+  }
+  const userAgent = (await headers()).get("user-agent")?.slice(0, 300) ?? null;
+  await data.savePushSubscription({ userId: user.id, endpoint, p256dh: keys.p256dh, auth: keys.auth, userAgent });
+  return { ok: true };
+}
+
+export async function disablePush(endpoint) {
+  const user = await getUser();
+  if (!user || typeof endpoint !== "string") return { ok: false };
+  await data.deletePushSubscription(endpoint, user.id);
+  return { ok: true };
+}
+
 export async function signOut() {
   const supabase = await createAuthClient();
   await supabase.auth.signOut();
