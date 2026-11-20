@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Geist } from "next/font/google";
 import { getUser, isAdmin } from "@/lib/session";
 import BottomNav from "@/app/components/BottomNav";
+import PushNavigator from "@/app/components/PushNavigator";
 import { countUnreadChats } from "@/lib/data";
 import "./globals.css";
 
@@ -41,6 +42,7 @@ export default async function RootLayout({ children }) {
         </header>
         {/* Extra bottom padding when signed in keeps content clear of the fixed tab bar. */}
         <main className={`mx-auto w-full max-w-3xl flex-1 px-4 ${user ? "pb-32" : "pb-16"}`}>{children}</main>
+        {user && <PushNavigator />}
         {user && <BottomNav showAdmin={isAdmin(user)} userId={user.id} userEmail={user.email} unread={unread} />}
       </body>
     </html>
