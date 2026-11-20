@@ -4,6 +4,7 @@
 // It sits outside ProfileForm because forms can't be nested.
 import { useFormStatus } from "react-dom";
 import posthog from "posthog-js";
+import SubmitButton from "@/app/components/SubmitButton";
 import { connectGitHub, disconnectGitHub, refreshGitHub } from "@/app/actions";
 
 export default function GitHubConnect({ github, status, canDisconnect }) {
@@ -23,7 +24,9 @@ export default function GitHubConnect({ github, status, canDisconnect }) {
           )}
         </div>
         <form action={connectGitHub} onSubmit={() => posthog.capture("github_connect_clicked")}>
-          <Submit className="btn-primary" pending="Opening GitHub…">Connect GitHub</Submit>
+          <SubmitButton className="btn-primary" pendingLabel="Connecting to GitHub…" leavesSite>
+            Connect GitHub
+          </SubmitButton>
         </form>
       </div>
     );
