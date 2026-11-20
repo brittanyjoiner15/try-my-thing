@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import posthog from "posthog-js";
 import { sendMagicLink, signInWithGitHub, verifyEmailCode } from "@/app/actions";
+import SubmitButton from "@/app/components/SubmitButton";
 
 function LoginForm() {
   const [state, action, pending] = useActionState(sendMagicLink, {});
@@ -16,7 +17,9 @@ function LoginForm() {
     <div className="panel">
       <h1 className="text-2xl font-bold">Sign in</h1>
       <form action={signInWithGitHub} className="mt-6" onSubmit={() => posthog.capture("github_sign_in_clicked")}>
-        <button className="btn-primary w-full">Continue with GitHub</button>
+        <SubmitButton className="btn-primary w-full" pendingLabel="Connecting to GitHub…" leavesSite>
+          Continue with GitHub
+        </SubmitButton>
         <p className="hint">Fills in your profile from GitHub. You check it all before saving.</p>
       </form>
       {linkError === "github" && <p className="mt-3 text-sm text-red-600">GitHub sign-in didn&apos;t start. Try again, or use email.</p>}
