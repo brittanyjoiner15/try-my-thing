@@ -6,6 +6,7 @@ import { getGitHubProfile } from "@/lib/data";
 import ProfileForm from "@/app/components/ProfileForm";
 import GitHubConnect from "@/app/components/GitHubConnect";
 import ConnectQR from "@/app/components/ConnectQR";
+import PushToggle from "@/app/components/PushToggle";
 import { ensureConnectCode } from "@/lib/connect";
 
 export default async function ProfilePage({ searchParams }) {
@@ -22,6 +23,7 @@ export default async function ProfilePage({ searchParams }) {
   return (
     <div className="space-y-4">
       {saved && <p className="mx-auto max-w-xl rounded-lg bg-green-100 px-4 py-3 text-sm text-green-800">Profile saved.</p>}
+      <PushToggle />
       <ConnectQR url={connectUrl} qrSvg={qrSvg} />
       <GitHubConnect github={github} status={githubStatus} canDisconnect={canDisconnect} />
       <ProfileForm profile={profile} github={github} title="Your profile" intro="Testers and builders see this when you match." submitLabel="Save" />
